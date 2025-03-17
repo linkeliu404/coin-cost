@@ -12,8 +12,8 @@ import {
   Title,
   Filler,
 } from "chart.js";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { useChartData } from "@/hooks/useChartData";
 
 // 注册Chart.js组件

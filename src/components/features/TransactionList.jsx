@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { FiTrash2, FiEdit2, FiMoreVertical } from "react-icons/fi";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
