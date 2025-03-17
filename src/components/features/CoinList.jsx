@@ -30,7 +30,7 @@ const CoinList = ({ coins, onSelectCoin, onAddTransaction }) => {
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
-            暂无加密货币，请点击"添加加密货币"按钮添加
+            暂无加密货币，请点击&quot;添加加密货币&quot;按钮添加
           </div>
         </CardContent>
       </Card>

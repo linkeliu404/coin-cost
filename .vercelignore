@@ -1,0 +1,10 @@
+.git
+node_modules
+.next
+.vscode
+.github
+README.md
+.gitignore
+.eslintrc.json
+.prettierrc
+.prettierignore 

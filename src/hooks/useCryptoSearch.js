@@ -32,13 +32,13 @@ export const useCryptoSearch = () => {
   }, []);
 
   // 防抖搜索
-  const debouncedSearch = useCallback(
-    debounce(async (query) => {
-      if (!query.trim()) {
-        setSearchResults([]);
-        return;
-      }
+  const debouncedSearch = useCallback((query) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
 
+    const performSearch = async () => {
       try {
         setIsLoading(true);
         const results = await searchCryptocurrencies(query);
@@ -49,9 +49,10 @@ export const useCryptoSearch = () => {
       } finally {
         setIsLoading(false);
       }
-    }, 500),
-    []
-  );
+    };
+
+    debounce(performSearch, 500)();
+  }, []);
 
   // 当搜索查询变化时执行搜索
   useEffect(() => {

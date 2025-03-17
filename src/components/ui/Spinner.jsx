@@ -1,35 +1,30 @@
 import React from "react";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * @typedef {Object} SpinnerProps
- * @property {string} [size='md'] - 加载图标大小
- * @property {string} [color='primary'] - 加载图标颜色
- * @property {string} [className] - 额外的CSS类名
- */
-
-const spinnerSizes = {
-  sm: "h-4 w-4",
-  md: "h-6 w-6",
-  lg: "h-8 w-8",
-  xl: "h-10 w-10",
-};
-
-/**
- * 加载中组件
- * @param {SpinnerProps} props
+ * 加载中旋转组件
+ * @param {Object} props - 组件属性
+ * @param {string} [props.size="md"] - 尺寸，可选值：sm, md, lg, xl
+ * @param {string} [props.className] - 自定义类名
  * @returns {JSX.Element}
  */
-export function Spinner({ size = "md", className, ...props }) {
+const Spinner = ({ size = "md", className }) => {
+  const sizeClasses = {
+    sm: "h-4 w-4 border-2",
+    md: "h-6 w-6 border-2",
+    lg: "h-8 w-8 border-3",
+    xl: "h-12 w-12 border-4",
+  };
+
   return (
-    <Loader2
+    <div
       className={cn(
-        "animate-spin text-muted-foreground",
-        spinnerSizes[size],
+        "animate-spin rounded-full border-solid border-primary border-t-transparent",
+        sizeClasses[size],
         className
       )}
-      {...props}
     />
   );
-}
+};
+
+export { Spinner };
