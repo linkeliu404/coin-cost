@@ -65,8 +65,23 @@ npm start
    - 点击 "New Project"
    - 选择你的 GitHub 仓库
    - Vercel 会自动检测 Next.js 项目并设置构建配置
+   - 在构建设置中，确保以下配置：
+     - Framework Preset: Next.js
+     - Build Command: npm run build
+     - Output Directory: .next
+     - Install Command: npm install --legacy-peer-deps
+     - Node.js Version: 18.x
    - 点击 "Deploy" 开始部署
 3. 部署完成后，你将获得一个可访问的 URL
+
+### 环境变量设置
+
+在 Vercel 部署时，确保设置以下环境变量：
+
+```
+NEXT_PUBLIC_API_URL=https://api.coingecko.com/api/v3
+NEXT_PUBLIC_APP_NAME=加密货币成本监控工具
+```
 
 ### 手动部署
 
@@ -101,6 +116,12 @@ npx shadcn@latest add button card dialog tabs input label textarea dropdown-menu
 ```
 
 3. 检查 next.config.js 文件是否正确配置
+
+4. 如果在 Vercel 上部署时遇到问题，尝试以下操作：
+   - 在 Vercel 项目设置中，添加环境变量 `NEXT_PUBLIC_API_URL=https://api.coingecko.com/api/v3`
+   - 在 Vercel 项目设置中，将 Node.js 版本设置为 18.x
+   - 在 Vercel 项目设置中，启用 "Install Command Override" 并设置为 `npm install --legacy-peer-deps`
+   - 尝试使用 `npm run rebuild` 命令在本地重新构建项目，确保没有错误
 
 ## 许可证
 
