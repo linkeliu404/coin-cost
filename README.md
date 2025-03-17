@@ -57,11 +57,50 @@ npm start
 
 ## 部署到 Vercel
 
-该项目可以轻松部署到 Vercel 平台：
+该项目已配置为可以轻松部署到 Vercel 平台：
 
-1. 在 GitHub 上推送你的代码
+1. Fork 或克隆此仓库到你的 GitHub 账户
 2. 在 Vercel 上导入项目
+   - 访问 [Vercel](https://vercel.com) 并登录
+   - 点击 "New Project"
+   - 选择你的 GitHub 仓库
+   - Vercel 会自动检测 Next.js 项目并设置构建配置
+   - 点击 "Deploy" 开始部署
 3. 部署完成后，你将获得一个可访问的 URL
+
+### 手动部署
+
+你也可以使用 Vercel CLI 进行部署：
+
+```bash
+# 安装 Vercel CLI
+npm install -g vercel
+
+# 登录
+vercel login
+
+# 部署
+vercel
+```
+
+## 故障排除
+
+如果在构建过程中遇到问题，请尝试以下步骤：
+
+1. 清除缓存并重新安装依赖
+
+```bash
+rm -rf node_modules .next
+npm install
+```
+
+2. 确保所有 UI 组件都已安装
+
+```bash
+npx shadcn@latest add button card dialog tabs input label textarea dropdown-menu tooltip
+```
+
+3. 检查 next.config.js 文件是否正确配置
 
 ## 许可证
 
