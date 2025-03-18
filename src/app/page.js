@@ -21,6 +21,7 @@ export default function Home() {
     deleteTransaction,
     refreshPortfolio,
     updateTransaction,
+    importPortfolio,
   } = usePortfolio();
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -29,6 +30,7 @@ export default function Home() {
   const [selectedCrypto, setSelectedCrypto] = useState(null);
   const [transactionAdded, setTransactionAdded] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
+  const [importError, setImportError] = useState(null);
 
   // 当选择的币种ID变化时，获取币种详情
   useEffect(() => {
@@ -194,6 +196,29 @@ export default function Home() {
       (coin) => coin.transactions && coin.transactions.length > 0
     );
 
+  // 处理导入数据
+  const handleImportData = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (importPortfolio(data)) {
+          refreshPortfolio();
+          setImportError(null);
+        } else {
+          setImportError("导入失败：数据格式不正确");
+        }
+      } catch (error) {
+        console.error("Failed to parse imported file:", error);
+        setImportError("导入失败：文件格式不正确");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header
@@ -251,6 +276,32 @@ export default function Home() {
                 portfolio={portfolio}
                 isLoading={isPortfolioLoading} // 传递加载状态
               />
+            )}
+
+            {/* 未添加任何加密货币时显示导入按钮 */}
+            {!hasAnyTransactions && (
+              <div className="text-center py-8">
+                <div className="mb-4">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => {
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.accept = ".json";
+                      input.onchange = handleImportData;
+                      input.click();
+                    }}
+                  >
+                    导入数据
+                  </Button>
+                </div>
+                {importError && (
+                  <div className="text-sm text-destructive mt-2">
+                    {importError}
+                  </div>
+                )}
+              </div>
             )}
           </>
         )}

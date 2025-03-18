@@ -18,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
   Spinner,
+  Button,
 } from "@/components/ui";
 import { useChartData } from "@/hooks/useChartData";
 
@@ -45,8 +46,13 @@ ChartJS.register(
  * @returns {JSX.Element}
  */
 const PortfolioCharts = ({ portfolio }) => {
-  const { portfolioChartData, weeklyProfitChartData, isLoading, error } =
-    useChartData(portfolio);
+  const {
+    portfolioChartData,
+    weeklyProfitChartData,
+    isLoading,
+    error,
+    retryFetchHistoricalData,
+  } = useChartData(portfolio);
 
   if (!portfolio || portfolio.coins.length === 0) {
     return (
@@ -110,8 +116,15 @@ const PortfolioCharts = ({ portfolio }) => {
             <CardTitle>投资组合分布</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8 text-destructive">
-              加载图表数据失败
+            <div className="text-center py-8">
+              <div className="text-destructive mb-4">{error}</div>
+              <Button
+                variant="outline"
+                onClick={retryFetchHistoricalData}
+                disabled={isLoading}
+              >
+                重试
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -120,8 +133,15 @@ const PortfolioCharts = ({ portfolio }) => {
             <CardTitle>7天收益图</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8 text-destructive">
-              加载图表数据失败
+            <div className="text-center py-8">
+              <div className="text-destructive mb-4">{error}</div>
+              <Button
+                variant="outline"
+                onClick={retryFetchHistoricalData}
+                disabled={isLoading}
+              >
+                重试
+              </Button>
             </div>
           </CardContent>
         </Card>
