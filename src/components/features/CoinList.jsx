@@ -1,13 +1,15 @@
 import React from "react";
 import { FiPlusCircle } from "react-icons/fi";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import Card from "@/components/ui/card";
+import Button from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+const { CardContent, CardHeader, CardTitle } = Card;
 
 /**
  * @typedef {Object} CoinListProps
