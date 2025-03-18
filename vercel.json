@@ -2,9 +2,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "devCommand": "npm run dev",
-  "installCommand": "npm install --legacy-peer-deps",
+  "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["iad1"],
+  "env": {
+    "NODE_OPTIONS": "--max_old_space_size=4096"
+  },
   "headers": [
     {
       "source": "/(.*)",
