@@ -134,25 +134,35 @@ export default function Home() {
 
   // 添加或更新交易记录
   const handleAddOrUpdateTransaction = async (transactionData) => {
-    if (!selectedCoinId) return;
-
-    let success;
-
-    if (editingTransaction) {
-      // 更新现有交易
-      success = await updateTransaction(
-        selectedCoinId,
-        editingTransaction.id,
-        transactionData
-      );
-    } else {
-      // 添加新交易
-      success = await addTransaction(selectedCoinId, transactionData);
+    if (!selectedCoinId || !selectedCrypto) {
+      console.error("No coin selected or crypto data missing");
+      return;
     }
 
-    if (success) {
-      setTransactionAdded(true);
-      setEditingTransaction(null);
+    try {
+      let success;
+
+      if (editingTransaction) {
+        // 更新现有交易
+        success = await updateTransaction(
+          selectedCoinId,
+          editingTransaction.id,
+          transactionData
+        );
+      } else {
+        // 添加新交易
+        success = await addTransaction(selectedCoinId, transactionData);
+      }
+
+      if (success) {
+        setTransactionAdded(true);
+        setEditingTransaction(null);
+        setIsTransactionFormOpen(false);
+      } else {
+        console.error("Failed to add/update transaction");
+      }
+    } catch (error) {
+      console.error("Error in handleAddOrUpdateTransaction:", error);
     }
   };
 

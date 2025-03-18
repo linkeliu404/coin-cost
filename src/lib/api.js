@@ -36,30 +36,54 @@ export const searchCryptocurrencies = async (query) => {
   if (!query.trim()) return [];
 
   try {
-    const response = await axios.get(`${API_BASE_URL}/search`, {
-      params: {
-        query,
-      },
-    });
+    // 检查是否是合约地址（以0x开头的42位十六进制字符串）
+    const isContractAddress = /^0x[a-fA-F0-9]{40}$/.test(query);
 
-    // 搜索API只返回基本信息，需要获取详细信息
-    const coins = response.data.coins.slice(0, 10); // 限制结果数量
+    let response;
+    if (isContractAddress) {
+      // 如果是合约地址，直接使用markets API
+      response = await axios.get(`${API_BASE_URL}/coins/markets`, {
+        params: {
+          vs_currency: "usd",
+          order: "market_cap_desc",
+          sparkline: false,
+          price_change_percentage: "24h",
+        },
+      });
 
-    if (coins.length === 0) return [];
+      // 过滤出匹配合约地址的币种
+      const contractCoins = response.data.filter(
+        (coin) => coin.contract_address?.toLowerCase() === query.toLowerCase()
+      );
 
-    // 获取详细信息
-    const coinIds = coins.map((coin) => coin.id).join(",");
-    const detailsResponse = await axios.get(`${API_BASE_URL}/coins/markets`, {
-      params: {
-        vs_currency: "usd",
-        ids: coinIds,
-        order: "market_cap_desc",
-        sparkline: false,
-        price_change_percentage: "24h",
-      },
-    });
+      return contractCoins;
+    } else {
+      // 使用搜索API进行模糊搜索
+      response = await axios.get(`${API_BASE_URL}/search`, {
+        params: {
+          query,
+        },
+      });
 
-    return detailsResponse.data;
+      // 搜索API只返回基本信息，需要获取详细信息
+      const coins = response.data.coins.slice(0, 10); // 限制结果数量
+
+      if (coins.length === 0) return [];
+
+      // 获取详细信息
+      const coinIds = coins.map((coin) => coin.id).join(",");
+      const detailsResponse = await axios.get(`${API_BASE_URL}/coins/markets`, {
+        params: {
+          vs_currency: "usd",
+          ids: coinIds,
+          order: "market_cap_desc",
+          sparkline: false,
+          price_change_percentage: "24h",
+        },
+      });
+
+      return detailsResponse.data;
+    }
   } catch (error) {
     console.error("Failed to search cryptocurrencies:", error);
     return [];

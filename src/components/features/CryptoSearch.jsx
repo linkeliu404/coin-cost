@@ -59,7 +59,7 @@ const CryptoSearch = ({ isOpen, onClose, onSelect }) => {
         <div className="mb-6">
           <div className="relative">
             <Input
-              placeholder="搜索加密货币名称或代码..."
+              placeholder="搜索加密货币名称、代码或合约地址..."
               value={searchQuery}
               onChange={handleSearch}
               className="pr-10"
@@ -73,7 +73,13 @@ const CryptoSearch = ({ isOpen, onClose, onSelect }) => {
               </button>
             )}
           </div>
-          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+          {error && (
+            <p className="mt-2 text-sm text-red-500">
+              {error === "Failed to search cryptocurrencies"
+                ? "搜索失败，请稍后重试"
+                : error}
+            </p>
+          )}
         </div>
 
         <div className="mb-4">
@@ -87,7 +93,9 @@ const CryptoSearch = ({ isOpen, onClose, onSelect }) => {
             </div>
           ) : displayResults.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchQuery ? "没有找到匹配的加密货币" : "无法加载热门加密货币"}
+              {searchQuery
+                ? "没有找到匹配的加密货币，请尝试其他关键词"
+                : "无法加载热门加密货币，请刷新页面重试"}
             </div>
           ) : (
             <div className="max-h-96 overflow-y-auto">
@@ -129,6 +137,9 @@ const CryptoSearch = ({ isOpen, onClose, onSelect }) => {
                             src={crypto.image}
                             alt={crypto.name}
                             className="h-8 w-8 rounded-full mr-3"
+                            onError={(e) => {
+                              e.target.src = "/placeholder.png";
+                            }}
                           />
                           <div>
                             <div className="font-medium">{crypto.name}</div>
