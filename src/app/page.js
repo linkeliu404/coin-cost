@@ -10,8 +10,7 @@ import PortfolioCharts from "@/components/features/PortfolioCharts";
 import CoinList from "@/components/features/CoinList";
 import TransactionList from "@/components/features/TransactionList";
 import TransactionFormDialog from "@/components/features/TransactionFormDialog";
-import Button from "@/components/ui/button";
-import Spinner from "@/components/ui/spinner";
+import { Button, Spinner } from "@/components/ui";
 
 export default function Home() {
   const {

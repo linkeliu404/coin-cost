@@ -1,6 +1,6 @@
 import React from "react";
 import { FiPlus, FiRefreshCw } from "react-icons/fi";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui";
 
 /**
  * @typedef {Object} HeaderProps

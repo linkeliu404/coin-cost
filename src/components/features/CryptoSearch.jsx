@@ -7,8 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Button, Spinner } from "@/components/ui";
 import { useCryptoSearch } from "@/hooks/useCryptoSearch";
 
 /**

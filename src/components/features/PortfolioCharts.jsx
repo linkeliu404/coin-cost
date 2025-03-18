@@ -12,8 +12,13 @@ import {
   Title,
   Filler,
 } from "chart.js";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Spinner,
+} from "@/components/ui";
 import { useChartData } from "@/hooks/useChartData";
 
 // 注册Chart.js组件
