@@ -260,6 +260,7 @@ export default function Home() {
         isOpen={isSearchModalOpen}
         onClose={handleCloseSearchModal}
         onSelect={handleSelectCrypto}
+        portfolio={portfolio}
       />
 
       {selectedCrypto && (

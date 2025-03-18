@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FiSearch, FiX } from "react-icons/fi";
+import { FiSearch, FiX, FiCheck } from "react-icons/fi";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import { useCryptoSearch } from "@/hooks/useCryptoSearch";
  * @property {boolean} isOpen - 是否打开搜索模态框
  * @property {() => void} onClose - 关闭模态框的回调函数
  * @property {(crypto: Object) => void} onSelect - 选择加密货币的回调函数
+ * @property {Array} [portfolio] - 当前投资组合，可选
  */
 
 /**
@@ -22,7 +23,12 @@ import { useCryptoSearch } from "@/hooks/useCryptoSearch";
  * @param {CryptoSearchProps} props
  * @returns {JSX.Element}
  */
-const CryptoSearch = ({ isOpen, onClose, onSelect }) => {
+const CryptoSearch = ({
+  isOpen,
+  onClose,
+  onSelect,
+  portfolio = { coins: [] },
+}) => {
   const {
     searchQuery,
     searchResults,
@@ -48,6 +54,13 @@ const CryptoSearch = ({ isOpen, onClose, onSelect }) => {
   };
 
   const displayResults = searchQuery ? searchResults : topCryptos;
+
+  // 检查币种是否已添加到投资组合
+  const isAlreadyAdded = (cryptoId) => {
+    return (
+      portfolio.coins && portfolio.coins.some((coin) => coin.id === cryptoId)
+    );
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -129,54 +142,69 @@ const CryptoSearch = ({ isOpen, onClose, onSelect }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-card divide-y divide-border">
-                  {displayResults.map((crypto) => (
-                    <tr key={crypto.id} className="hover:bg-muted/50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <img
-                            src={crypto.image}
-                            alt={crypto.name}
-                            className="h-8 w-8 rounded-full mr-3"
-                            onError={(e) => {
-                              e.target.src = "/placeholder.png";
-                            }}
-                          />
-                          <div>
-                            <div className="font-medium">{crypto.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {crypto.symbol.toUpperCase()}
+                  {displayResults.map((crypto) => {
+                    const added = isAlreadyAdded(crypto.id);
+                    return (
+                      <tr key={crypto.id} className="hover:bg-muted/50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <img
+                              src={crypto.image}
+                              alt={crypto.name}
+                              className="h-8 w-8 rounded-full mr-3"
+                              onError={(e) => {
+                                e.target.src = "/placeholder.png";
+                              }}
+                            />
+                            <div>
+                              <div className="font-medium">{crypto.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {crypto.symbol.toUpperCase()}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        ${crypto.current_price.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <span
-                          className={
-                            crypto.price_change_percentage_24h > 0
-                              ? "text-green-600"
-                              : crypto.price_change_percentage_24h < 0
-                              ? "text-red-600"
-                              : "text-muted-foreground"
-                          }
-                        >
-                          {crypto.price_change_percentage_24h > 0 ? "+" : ""}
-                          {crypto.price_change_percentage_24h.toFixed(2)}%
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => handleSelect(crypto)}
-                        >
-                          选择
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          ${crypto.current_price.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <span
+                            className={
+                              crypto.price_change_percentage_24h > 0
+                                ? "text-green-600"
+                                : crypto.price_change_percentage_24h < 0
+                                ? "text-red-600"
+                                : "text-muted-foreground"
+                            }
+                          >
+                            {crypto.price_change_percentage_24h > 0 ? "+" : ""}
+                            {crypto.price_change_percentage_24h.toFixed(2)}%
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          {added ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled
+                              className="text-muted-foreground"
+                            >
+                              <FiCheck className="mr-1 h-4 w-4" />
+                              已添加
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleSelect(crypto)}
+                            >
+                              添加
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

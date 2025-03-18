@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { FiTrash2, FiEdit2, FiMoreVertical } from "react-icons/fi";
 import {
@@ -38,6 +38,7 @@ const TransactionList = ({
   portfolio,
 }) => {
   const [activeTab, setActiveTab] = useState("all");
+  const [allTransactions, setAllTransactions] = useState([]);
 
   // 获取所有币种的ID和名称，用于构建标签页
   const coinTabs = useMemo(() => {
@@ -52,55 +53,44 @@ const TransactionList = ({
     }));
   }, [portfolio]);
 
+  // 组件挂载或portfolio变化时获取所有交易记录
+  useEffect(() => {
+    if (!portfolio || !portfolio.coins) return;
+
+    const transactions = [];
+    portfolio.coins.forEach((coin) => {
+      if (coin.transactions && coin.transactions.length > 0) {
+        // 为每个交易添加币种信息
+        const coinTransactions = coin.transactions.map((tx) => ({
+          ...tx,
+          coinId: coin.id,
+          coinName: coin.name,
+          coinSymbol: coin.symbol,
+          coinImage: coin.image,
+        }));
+        transactions.push(...coinTransactions);
+      }
+    });
+
+    // 按日期降序排序
+    transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    setAllTransactions(transactions);
+  }, [portfolio]);
+
   // 根据选中的标签页筛选交易记录
   const filteredTransactions = useMemo(() => {
     if (activeTab === "all") {
-      // 如果只有一个币种，直接返回当前交易记录
-      if (!coinTabs.length) {
-        return transactions;
-      }
-
-      // 如果有多个币种，需要从portfolio中获取所有币种的交易记录
-      const allTransactions = [];
-      portfolio.coins.forEach((coin) => {
-        if (coin.transactions && coin.transactions.length > 0) {
-          // 为每个交易添加币种信息
-          const coinTransactions = coin.transactions.map((tx) => ({
-            ...tx,
-            coinId: coin.id,
-            coinName: coin.name,
-            coinSymbol: coin.symbol,
-            coinImage: coin.image,
-          }));
-          allTransactions.push(...coinTransactions);
-        }
-      });
-
-      // 按日期降序排序
-      return allTransactions.sort(
-        (a, b) => new Date(b.date) - new Date(a.date)
-      );
+      return allTransactions;
     } else {
-      // 筛选特定币种的交易记录
-      const selectedCoin = portfolio.coins.find(
-        (coin) => coin.id === activeTab
-      );
-      if (!selectedCoin || !selectedCoin.transactions) {
-        return [];
-      }
-
-      // 为每个交易添加币种信息
-      return selectedCoin.transactions.map((tx) => ({
-        ...tx,
-        coinId: selectedCoin.id,
-        coinName: selectedCoin.name,
-        coinSymbol: selectedCoin.symbol,
-        coinImage: selectedCoin.image,
-      }));
+      // 从所有交易中筛选特定币种的交易记录
+      return allTransactions.filter((tx) => tx.coinId === activeTab);
     }
-  }, [activeTab, transactions, portfolio, coinTabs]);
+  }, [activeTab, allTransactions]);
 
-  if (!transactions || transactions.length === 0) {
+  if (
+    (!transactions || transactions.length === 0) &&
+    (!allTransactions || allTransactions.length === 0)
+  ) {
     return (
       <Card className="mb-6">
         <CardHeader>
@@ -136,7 +126,7 @@ const TransactionList = ({
               <TabsTrigger value="all">全部</TabsTrigger>
               {coinTabs.map((coin) => (
                 <TabsTrigger key={coin.id} value={coin.id}>
-                  {coin.name}
+                  {coin.symbol.toUpperCase()}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -203,7 +193,7 @@ const TransactionList = ({
               {filteredTransactions.map((transaction) => {
                 const totalValue = transaction.amount * transaction.price;
                 const dateObj = new Date(transaction.date);
-                const symbol = transaction.coinSymbol || crypto.symbol;
+                const symbol = transaction.coinSymbol || crypto?.symbol || "";
 
                 return (
                   <tr key={transaction.id} className="hover:bg-muted/50">
