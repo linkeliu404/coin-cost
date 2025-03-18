@@ -25,7 +25,6 @@ export default function Home() {
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedCoinId, setSelectedCoinId] = useState(null);
   const [selectedCrypto, setSelectedCrypto] = useState(null);
   const [transactionAdded, setTransactionAdded] = useState(false);
@@ -95,9 +94,8 @@ export default function Home() {
 
   // 刷新投资组合数据
   const handleRefresh = async () => {
-    setIsRefreshing(true);
+    // 不设置单独的刷新状态，直接调用刷新
     await refreshPortfolio();
-    setIsRefreshing(false);
   };
 
   // 选择加密货币
@@ -201,7 +199,7 @@ export default function Home() {
       <Header
         onAddCrypto={handleOpenSearchModal}
         onRefresh={handleRefresh}
-        isRefreshing={isRefreshing}
+        isRefreshing={isPortfolioLoading} // 使用全局加载状态
       />
 
       <main className="container mx-auto px-4 py-6">
@@ -240,6 +238,7 @@ export default function Home() {
                     });
                 }
               }}
+              isLoading={isPortfolioLoading} // 传递加载状态
             />
 
             {/* 显示交易记录列表 */}
@@ -250,6 +249,7 @@ export default function Home() {
                 onDelete={handleDeleteTransaction}
                 onEdit={handleEditTransaction}
                 portfolio={portfolio}
+                isLoading={isPortfolioLoading} // 传递加载状态
               />
             )}
           </>

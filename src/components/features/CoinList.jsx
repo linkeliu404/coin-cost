@@ -17,6 +17,7 @@ import {
  * @property {Array} coins - 加密货币列表
  * @property {(coinId: string) => void} onSelectCoin - 选择加密货币的回调函数
  * @property {(coinId: string) => void} onAddTransaction - 添加交易记录的回调函数
+ * @property {boolean} [isLoading] - 加载状态
  */
 
 /**
@@ -24,7 +25,12 @@ import {
  * @param {CoinListProps} props
  * @returns {JSX.Element}
  */
-const CoinList = ({ coins, onSelectCoin, onAddTransaction }) => {
+const CoinList = ({
+  coins,
+  onSelectCoin,
+  onAddTransaction,
+  isLoading = false,
+}) => {
   if (!coins || coins.length === 0) {
     return (
       <Card className="mb-6">
@@ -94,7 +100,11 @@ const CoinList = ({ coins, onSelectCoin, onAddTransaction }) => {
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-card divide-y divide-border">
+            <tbody
+              className={`bg-card divide-y divide-border ${
+                isLoading ? "opacity-70" : ""
+              }`}
+            >
               {coins.map((coin) => {
                 const hasTransactions =
                   coin.transactions && coin.transactions.length > 0;
@@ -174,6 +184,7 @@ const CoinList = ({ coins, onSelectCoin, onAddTransaction }) => {
                                 e.stopPropagation();
                                 onAddTransaction && onAddTransaction(coin.id);
                               }}
+                              disabled={isLoading}
                             >
                               <FiPlusCircle className="h-4 w-4" />
                             </Button>

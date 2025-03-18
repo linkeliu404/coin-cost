@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  * @property {(transactionId: string) => void} onDelete - 删除交易的回调函数
  * @property {(transaction: Object) => void} onEdit - 编辑交易的回调函数
  * @property {Object} portfolio - 投资组合数据
+ * @property {boolean} [isLoading] - 加载状态
  */
 
 /**
@@ -36,6 +37,7 @@ const TransactionList = ({
   onDelete,
   onEdit,
   portfolio,
+  isLoading = false,
 }) => {
   const [activeTab, setActiveTab] = useState("all");
   const [allTransactions, setAllTransactions] = useState([]);
@@ -189,7 +191,11 @@ const TransactionList = ({
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-card divide-y divide-border">
+            <tbody
+              className={`bg-card divide-y divide-border ${
+                isLoading ? "opacity-70" : ""
+              }`}
+            >
               {filteredTransactions.map((transaction) => {
                 const totalValue = transaction.amount * transaction.price;
                 const dateObj = new Date(transaction.date);
@@ -239,7 +245,11 @@ const TransactionList = ({
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isLoading}
+                          >
                             <FiMoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -257,6 +267,7 @@ const TransactionList = ({
                                 onEdit && onEdit(transaction);
                               }
                             }}
+                            disabled={isLoading}
                           >
                             <FiEdit2 className="mr-2 h-4 w-4" />
                             <span>编辑</span>
@@ -271,6 +282,7 @@ const TransactionList = ({
                               }
                             }}
                             className="text-destructive focus:text-destructive"
+                            disabled={isLoading}
                           >
                             <FiTrash2 className="mr-2 h-4 w-4" />
                             <span>删除</span>

@@ -18,14 +18,14 @@ const Header = ({ onAddCrypto, onRefresh, isRefreshing }) => {
   return (
     <header className="bg-primary text-primary-foreground p-4 shadow-md">
       <div className="container mx-auto flex justify-between items-center">
-        <h1 className="text-xl font-bold">加密货币成本监控</h1>
+        <h1 className="text-xl font-bold">CryptoCost</h1>
         <div className="flex space-x-2">
           <Button
             onClick={onRefresh}
             disabled={isRefreshing}
             variant="secondary"
             size="sm"
-            className="flex items-center"
+            className="hidden md:flex items-center"
           >
             <FiRefreshCw
               className={`mr-1 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
@@ -39,7 +39,8 @@ const Header = ({ onAddCrypto, onRefresh, isRefreshing }) => {
             className="flex items-center"
           >
             <FiPlus className="mr-1 h-4 w-4" />
-            添加加密货币
+            <span className="hidden sm:inline">添加加密货币</span>
+            <span className="sm:hidden">添加</span>
           </Button>
         </div>
       </div>

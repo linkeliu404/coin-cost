@@ -177,9 +177,11 @@ const TransactionFormDialog = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-w-[95vw] w-full sm:max-w-[500px] p-4 sm:p-6 overflow-y-auto max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogTitle className="text-base sm:text-lg">
+            {dialogTitle}
+          </DialogTitle>
         </DialogHeader>
 
         <Tabs
@@ -197,34 +199,46 @@ const TransactionFormDialog = ({
           <form onSubmit={handleSubmit} className="mt-4">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="amount">数量</Label>
+                <Label htmlFor="amount" className="text-sm">
+                  数量
+                </Label>
                 <Input
                   id="amount"
                   name="amount"
                   type="number"
+                  inputMode="decimal"
                   value={formData.amount}
                   onChange={handleChange}
                   placeholder={`输入${crypto.symbol.toUpperCase()}数量`}
-                  className={cn(errors.amount && "border-destructive")}
+                  className={cn(
+                    errors.amount && "border-destructive",
+                    "text-sm"
+                  )}
                   required
                   step="any"
                 />
                 {errors.amount && (
-                  <p className="text-sm text-destructive">{errors.amount}</p>
+                  <p className="text-xs text-destructive">{errors.amount}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="price">价格 (USD)</Label>
+                <Label htmlFor="price" className="text-sm">
+                  价格 (USD)
+                </Label>
                 <div className="flex space-x-2">
                   <Input
                     id="price"
                     name="price"
                     type="number"
+                    inputMode="decimal"
                     value={formData.price}
                     onChange={handleChange}
                     placeholder="输入交易价格"
-                    className={cn(errors.price && "border-destructive")}
+                    className={cn(
+                      errors.price && "border-destructive",
+                      "text-sm"
+                    )}
                     required
                     step="any"
                   />
@@ -239,45 +253,55 @@ const TransactionFormDialog = ({
                   </Button>
                 </div>
                 {errors.price && (
-                  <p className="text-sm text-destructive">{errors.price}</p>
+                  <p className="text-xs text-destructive">{errors.price}</p>
                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="date">日期</Label>
+                  <Label htmlFor="date" className="text-sm">
+                    日期
+                  </Label>
                   <Input
                     id="date"
                     name="date"
                     type="date"
                     value={formData.date}
                     onChange={handleChange}
-                    className={cn(errors.date && "border-destructive")}
+                    className={cn(
+                      errors.date && "border-destructive",
+                      "text-sm"
+                    )}
                     required
                   />
                   {errors.date && (
-                    <p className="text-sm text-destructive">{errors.date}</p>
+                    <p className="text-xs text-destructive">{errors.date}</p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="time">时间</Label>
+                  <Label htmlFor="time" className="text-sm">
+                    时间
+                  </Label>
                   <Input
                     id="time"
                     name="time"
                     type="time"
                     value={formData.time}
                     onChange={handleChange}
-                    className={cn(errors.time && "border-destructive")}
+                    className={cn(
+                      errors.time && "border-destructive",
+                      "text-sm"
+                    )}
                     required
                   />
                   {errors.time && (
-                    <p className="text-sm text-destructive">{errors.time}</p>
+                    <p className="text-xs text-destructive">{errors.time}</p>
                   )}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="reason">
+                <Label htmlFor="reason" className="text-sm">
                   {activeTab === "buy" ? "买入理由" : "卖出理由"}
                 </Label>
                 <Textarea
@@ -286,7 +310,7 @@ const TransactionFormDialog = ({
                   value={formData.reason}
                   onChange={handleChange}
                   placeholder={reasonPlaceholder}
-                  className="resize-none"
+                  className="resize-none text-sm"
                   rows={3}
                 />
               </div>
@@ -296,6 +320,7 @@ const TransactionFormDialog = ({
               <Button
                 type="submit"
                 variant={activeTab === "buy" ? "default" : "destructive"}
+                className="w-full sm:w-auto"
               >
                 {buttonText}
               </Button>
