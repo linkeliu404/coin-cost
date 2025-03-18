@@ -30,28 +30,14 @@ async function fetchWithRetry(fetcher, retries = 3, delay = 1000) {
  */
 async function getBinancePrice(symbol) {
   try {
-    if (!symbol) return null;
-
-    // 转换为Binance支持的格式（如BTC变为BTCUSDT）
-    const binanceSymbol = `${symbol.toUpperCase()}USDT`;
-
-    const response = await axios.get(`${BINANCE_API_URL}/ticker/24hr`, {
-      params: { symbol: binanceSymbol },
-    });
-
-    if (response.data) {
-      return {
-        symbol: symbol,
-        price: parseFloat(response.data.lastPrice),
-        price_change_24h: parseFloat(response.data.priceChange),
-        price_change_percentage_24h: parseFloat(
-          response.data.priceChangePercent
-        ),
-      };
+    const response = await fetch(`/api/binance?symbol=${symbol}USDT`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return null;
+    const data = await response.json();
+    return parseFloat(data.lastPrice);
   } catch (error) {
-    console.log(`Error fetching Binance price for ${symbol}:`, error.message);
+    console.error(`Error fetching Binance price for ${symbol}:`, error);
     return null;
   }
 }
@@ -69,9 +55,9 @@ async function enrichWithBinanceData(coinGeckoData) {
   if (binanceData) {
     return {
       ...coinGeckoData,
-      binance_price: binanceData.price,
-      current_price: binanceData.price, // 优先使用Binance价格
-      price_change_percentage_24h: binanceData.price_change_percentage_24h,
+      binance_price: binanceData,
+      current_price: binanceData, // 优先使用Binance价格
+      price_change_percentage_24h: 0, // Binance does not provide 24h price change percentage
       price_source: "binance",
     };
   }
