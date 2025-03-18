@@ -235,12 +235,21 @@ export const usePortfolio = () => {
 
   /**
    * 导入投资组合数据
-   * @param {string} data - 投资组合数据的JSON字符串
+   * @param {Object|string} data - 投资组合数据对象或JSON字符串
    * @returns {boolean} 是否导入成功
    */
   const importPortfolio = (data) => {
     try {
-      const importedPortfolio = JSON.parse(data);
+      // 检查数据类型，如果是字符串则解析，否则直接使用
+      const importedPortfolio =
+        typeof data === "string" ? JSON.parse(data) : data;
+
+      // 验证数据格式
+      if (!importedPortfolio || !Array.isArray(importedPortfolio.coins)) {
+        console.error("Invalid portfolio data format");
+        return false;
+      }
+
       setPortfolio(importedPortfolio);
       savePortfolioToStorage(importedPortfolio);
       refreshPortfolio();
