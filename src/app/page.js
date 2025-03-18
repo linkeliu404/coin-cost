@@ -204,7 +204,70 @@ export default function Home() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target.result);
+        const content = e.target.result;
+        let data;
+
+        // 检查文件类型
+        if (file.type === "text/csv" || file.name.endsWith(".csv")) {
+          // 处理CSV文件
+          const lines = content.split("\n");
+          const headers = lines[0].split(",").map((h) => h.trim());
+          const transactions = lines
+            .slice(1)
+            .filter((line) => line.trim())
+            .map((line) => {
+              const values = line.split(",").map((v) => v.trim());
+              const record = {};
+              headers.forEach((header, index) => {
+                record[header] = values[index];
+              });
+              return record;
+            });
+
+          // 转换为投资组合数据格式
+          data = {
+            coins: transactions.reduce((acc, tx) => {
+              const coinSymbol = tx["币种"].toLowerCase();
+              const existingCoin = acc.find(
+                (c) => c.symbol.toLowerCase() === coinSymbol
+              );
+
+              if (existingCoin) {
+                existingCoin.transactions.push({
+                  id: crypto.randomUUID(),
+                  type: tx["类型"] === "买入" ? "buy" : "sell",
+                  amount: parseFloat(tx["数量"]),
+                  price: parseFloat(tx["价格(USD)"]),
+                  date: tx["日期"],
+                  reason: tx["备注"] || "",
+                });
+              } else {
+                acc.push({
+                  id: crypto.randomUUID(),
+                  symbol: coinSymbol,
+                  name: coinSymbol.toUpperCase(),
+                  image: `https://assets.coingecko.com/coins/images/1/small/${coinSymbol}.png`,
+                  currentPrice: parseFloat(tx["价格(USD)"]),
+                  transactions: [
+                    {
+                      id: crypto.randomUUID(),
+                      type: tx["类型"] === "买入" ? "buy" : "sell",
+                      amount: parseFloat(tx["数量"]),
+                      price: parseFloat(tx["价格(USD)"]),
+                      date: tx["日期"],
+                      reason: tx["备注"] || "",
+                    },
+                  ],
+                });
+              }
+              return acc;
+            }, []),
+          };
+        } else {
+          // 处理JSON文件
+          data = JSON.parse(content);
+        }
+
         if (importPortfolio(data)) {
           refreshPortfolio();
           setImportError(null);
@@ -288,7 +351,7 @@ export default function Home() {
                     onClick={() => {
                       const input = document.createElement("input");
                       input.type = "file";
-                      input.accept = ".json";
+                      input.accept = ".json,.csv";
                       input.onchange = handleImportData;
                       input.click();
                     }}
