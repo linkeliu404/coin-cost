@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
-import { FiTrash2, FiEdit2, FiMoreVertical } from "react-icons/fi";
+import { FiTrash2, FiEdit2, FiMoreVertical, FiDownload } from "react-icons/fi";
 import {
   Card,
   CardContent,
@@ -25,6 +25,68 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  * @property {Object} portfolio - 投资组合数据
  * @property {boolean} [isLoading] - 加载状态
  */
+
+/**
+ * 导出交易记录为CSV文件
+ * @param {Array} transactions - 交易记录数组
+ */
+const exportTransactionsToCSV = (transactions) => {
+  if (!transactions || transactions.length === 0) {
+    alert("没有可导出的交易记录");
+    return;
+  }
+
+  // 定义CSV标题行
+  const headers = [
+    "币种",
+    "类型",
+    "数量",
+    "价格(USD)",
+    "总价值(USD)",
+    "日期",
+    "备注",
+  ];
+
+  // 处理交易数据行
+  const rows = transactions.map((tx) => {
+    const totalValue = tx.amount * tx.price;
+    const dateObj = new Date(tx.date);
+    const formattedDate = format(dateObj, "yyyy-MM-dd HH:mm:ss");
+    const type = tx.type === "buy" ? "买入" : "卖出";
+
+    return [
+      tx.coinSymbol?.toUpperCase() || "",
+      type,
+      tx.amount,
+      tx.price,
+      totalValue,
+      formattedDate,
+      tx.reason || "",
+    ];
+  });
+
+  // 组合成CSV内容
+  const csvContent = [
+    headers.join(","),
+    ...rows.map((row) => row.join(",")),
+  ].join("\n");
+
+  // 创建下载链接
+  const blob = new Blob(["\uFEFF" + csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute(
+    "download",
+    `交易记录_${format(new Date(), "yyyyMMdd")}.csv`
+  );
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 
 /**
  * 交易列表组件
@@ -112,10 +174,25 @@ const TransactionList = ({
     setActiveTab(value);
   };
 
+  // 导出当前筛选后的交易记录
+  const handleExportTransactions = () => {
+    exportTransactionsToCSV(filteredTransactions);
+  };
+
   return (
     <Card className="mb-6">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>交易记录</CardTitle>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportTransactions}
+          disabled={isLoading || filteredTransactions.length === 0}
+          className="flex items-center"
+        >
+          <FiDownload className="mr-2 h-4 w-4" />
+          导出
+        </Button>
       </CardHeader>
       <CardContent>
         {coinTabs.length > 0 && (

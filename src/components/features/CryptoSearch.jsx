@@ -37,6 +37,7 @@ const CryptoSearch = ({
     error,
     updateSearchQuery,
     clearSearch,
+    retryFetchTopCryptos,
   } = useCryptoSearch();
 
   const handleSearch = (e) => {
@@ -106,9 +107,20 @@ const CryptoSearch = ({
             </div>
           ) : displayResults.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchQuery
-                ? "没有找到匹配的加密货币，请尝试其他关键词"
-                : "无法加载热门加密货币，请刷新页面重试"}
+              {searchQuery ? (
+                "没有找到匹配的加密货币，请尝试其他关键词"
+              ) : (
+                <div className="flex flex-col items-center">
+                  <p className="mb-3">无法加载热门加密货币</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={retryFetchTopCryptos}
+                  >
+                    重新加载
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="max-h-96 overflow-y-auto">

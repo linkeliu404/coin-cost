@@ -14,24 +14,68 @@ export const useCryptoSearch = () => {
   const [error, setError] = useState(null);
 
   // 获取热门加密货币
-  useEffect(() => {
-    const fetchTopCryptos = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getTopCryptocurrencies(20);
-        setTopCryptos(data);
-      } catch (err) {
-        setError("Failed to fetch top cryptocurrencies");
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchTopCryptos();
+  const fetchTopCryptos = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await getTopCryptocurrencies(50);
+      setTopCryptos(data);
+    } catch (error) {
+      console.error("Failed to fetch top cryptocurrencies:", error);
+      setError("Failed to fetch top cryptocurrencies");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  // 防抖搜索
+  // 重试获取热门加密货币
+  const retryFetchTopCryptos = useCallback(() => {
+    fetchTopCryptos();
+  }, [fetchTopCryptos]);
+
+  // 搜索加密货币
+  const searchCrypto = useCallback(async (query) => {
+    if (!query) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const results = await searchCryptocurrencies(query);
+      setSearchResults(results);
+    } catch (error) {
+      console.error("Failed to search cryptocurrencies:", error);
+      setError("Failed to search cryptocurrencies");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // 更新搜索查询
+  const updateSearchQuery = useCallback(
+    (query) => {
+      setSearchQuery(query);
+      searchCrypto(query);
+    },
+    [searchCrypto]
+  );
+
+  // 清除搜索
+  const clearSearch = useCallback(() => {
+    setSearchQuery("");
+    setSearchResults([]);
+  }, []);
+
+  // 初始加载热门加密货币
+  useEffect(() => {
+    fetchTopCryptos();
+  }, [fetchTopCryptos]);
+
+  /**
+   * 防抖搜索
+   */
   const debouncedSearch = useCallback((query) => {
     if (!query.trim()) {
       setSearchResults([]);
@@ -59,22 +103,6 @@ export const useCryptoSearch = () => {
     debouncedSearch(searchQuery);
   }, [searchQuery, debouncedSearch]);
 
-  /**
-   * 更新搜索查询
-   * @param {string} query - 搜索查询
-   */
-  const updateSearchQuery = (query) => {
-    setSearchQuery(query);
-  };
-
-  /**
-   * 清除搜索结果
-   */
-  const clearSearch = () => {
-    setSearchQuery("");
-    setSearchResults([]);
-  };
-
   return {
     searchQuery,
     searchResults,
@@ -83,5 +111,6 @@ export const useCryptoSearch = () => {
     error,
     updateSearchQuery,
     clearSearch,
+    retryFetchTopCryptos,
   };
 };

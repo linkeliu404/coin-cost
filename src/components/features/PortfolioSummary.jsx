@@ -79,50 +79,6 @@ const PortfolioSummary = ({ portfolio }) => {
             </p>
           </div>
         </div>
-
-        <div className="mt-6">
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">
-            投资组合构成
-          </h4>
-          <div className="space-y-3">
-            {portfolio.coins.map((coin) => {
-              const percentage = (coin.currentValue / totalValue) * 100;
-              const isProfitableCoin = coin.profitLoss > 0;
-
-              return (
-                <div key={coin.id} className="flex items-center">
-                  <img
-                    src={coin.image}
-                    alt={coin.name}
-                    className="h-6 w-6 rounded-full mr-2"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between mb-1">
-                      <p className="text-sm font-medium truncate">
-                        {coin.name} ({coin.symbol.toUpperCase()})
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        ${coin.currentValue.toLocaleString()} (
-                        {percentage.toFixed(2)}%)
-                      </p>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2.5">
-                      <div
-                        className="h-2.5 rounded-full"
-                        style={{
-                          width: `${percentage}%`,
-                          backgroundColor: isProfitableCoin
-                            ? "#10b981"
-                            : "#ef4444",
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </CardContent>
     </Card>
   );
