@@ -202,7 +202,7 @@ export default function Home() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const content = e.target.result;
         let data;
@@ -267,7 +267,7 @@ export default function Home() {
                   id: crypto.randomUUID(),
                   symbol: coinSymbol,
                   name: (tx["币种名称"] || coinSymbol).toUpperCase(),
-                  image: `https://s2.coinmarketcap.com/static/img/coins/64x64/${coinSymbol.toLowerCase()}.png`,
+                  image: `https://cryptocurrencyicons.org/api/icon/${coinSymbol.toLowerCase()}/64`,
                   currentPrice: price,
                   holdings: 0, // 将在 refreshPortfolio 中计算
                   averageBuyPrice: 0, // 将在 refreshPortfolio 中计算
@@ -290,8 +290,9 @@ export default function Home() {
           data = JSON.parse(content);
         }
 
-        if (importPortfolio(data)) {
-          refreshPortfolio();
+        // 导入投资组合数据 (异步处理)
+        const success = await importPortfolio(data);
+        if (success) {
           setImportError(null);
         } else {
           setImportError("导入失败：数据格式不正确");

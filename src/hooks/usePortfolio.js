@@ -238,8 +238,10 @@ export const usePortfolio = () => {
    * @param {Object|string} data - 投资组合数据对象或JSON字符串
    * @returns {boolean} 是否导入成功
    */
-  const importPortfolio = (data) => {
+  const importPortfolio = async (data) => {
     try {
+      setIsLoading(true);
+
       // 检查数据类型，如果是字符串则解析，否则直接使用
       const importedPortfolio =
         typeof data === "string" ? JSON.parse(data) : data;
@@ -247,112 +249,167 @@ export const usePortfolio = () => {
       // 验证数据格式
       if (!importedPortfolio || !Array.isArray(importedPortfolio.coins)) {
         console.error("Invalid portfolio data format");
+        setIsLoading(false);
         return false;
       }
 
       // 预处理投资组合数据，为每个币种计算基本指标
-      const processedCoins = importedPortfolio.coins.map((coin) => {
+      const coins = importedPortfolio.coins.map((coin) => ({
+        ...coin,
         // 确保交易数组存在
-        if (!Array.isArray(coin.transactions)) {
-          coin.transactions = [];
+        transactions: Array.isArray(coin.transactions) ? coin.transactions : [],
+      }));
+
+      // 临时保存处理后的数据，以便用户可以立即看到导入结果
+      const initialProcessed = processPortfolioData(coins);
+      setPortfolio(initialProcessed);
+      savePortfolioToStorage(initialProcessed);
+
+      // 获取所有币种的ID以获取最新价格
+      const coinSymbols = coins.map((coin) => coin.symbol.toLowerCase());
+      const coinIds = Array.from(new Set(coinSymbols)); // 去重
+
+      // 获取最新价格数据
+      if (coinIds.length > 0) {
+        try {
+          // 通过 API 获取最新价格数据
+          const cryptoDataMap = await getMultipleCryptocurrencyDetails(coinIds);
+
+          // 使用最新价格更新币种数据
+          const updatedCoins = coins.map((coin) => {
+            const symbol = coin.symbol.toLowerCase();
+            const cryptoData = cryptoDataMap[symbol] || cryptoDataMap[coin.id];
+
+            // 如果找到匹配的价格数据，更新币种信息
+            if (cryptoData) {
+              return {
+                ...coin,
+                id: cryptoData.id || coin.id,
+                name: cryptoData.name || coin.name,
+                image: cryptoData.image || coin.image,
+                currentPrice: cryptoData.current_price || coin.currentPrice,
+              };
+            }
+            return coin;
+          });
+
+          // 重新处理投资组合数据，使用更新后的价格
+          const finalProcessed = processPortfolioData(updatedCoins);
+          setPortfolio(finalProcessed);
+          savePortfolioToStorage(finalProcessed);
+        } catch (error) {
+          console.error("Failed to fetch updated prices:", error);
+          // 即使无法获取最新价格，仍然继续使用初始处理后的数据
         }
+      }
 
-        // 计算持有量、总投资、平均买入价格等
-        let totalHoldings = 0;
-        let totalInvestment = 0;
-        let totalBuyAmount = 0;
-        let firstBuyDate = null;
-        let lastTransactionDate = null;
-
-        // 处理每笔交易
-        coin.transactions.forEach((tx) => {
-          const amount = tx.amount || 0;
-          const price = tx.price || 0;
-
-          // 更新交易日期信息
-          const txDate = new Date(tx.date);
-          if (!firstBuyDate && tx.type === "buy") {
-            firstBuyDate = txDate;
-          } else if (tx.type === "buy" && txDate < firstBuyDate) {
-            firstBuyDate = txDate;
-          }
-
-          if (!lastTransactionDate) {
-            lastTransactionDate = txDate;
-          } else if (txDate > lastTransactionDate) {
-            lastTransactionDate = txDate;
-          }
-
-          // 计算持有量
-          if (tx.type === "buy") {
-            totalHoldings += amount;
-            totalInvestment += amount * price;
-            totalBuyAmount += amount;
-          } else if (tx.type === "sell") {
-            totalHoldings -= amount;
-            totalInvestment -= amount * price; // 简化处理，实际上应该使用FIFO等算法
-          }
-        });
-
-        // 计算平均买入价格
-        const averageBuyPrice =
-          totalBuyAmount > 0 ? totalInvestment / totalBuyAmount : 0;
-
-        // 计算当前价值和盈亏
-        const currentPrice = coin.currentPrice || 0;
-        const currentValue = totalHoldings * currentPrice;
-        const profitLoss = currentValue - totalInvestment;
-        const profitLossPercentage =
-          totalInvestment > 0 ? (profitLoss / totalInvestment) * 100 : 0;
-
-        // 返回处理后的币种数据
-        return {
-          ...coin,
-          holdings: totalHoldings,
-          totalInvestment,
-          averageBuyPrice,
-          currentValue,
-          profitLoss,
-          profitLossPercentage,
-          firstBuyDate: firstBuyDate ? firstBuyDate.toISOString() : null,
-          lastTransactionDate: lastTransactionDate
-            ? lastTransactionDate.toISOString()
-            : null,
-        };
-      });
-
-      // 计算投资组合总指标
-      let totalInvestment = 0;
-      let totalValue = 0;
-
-      processedCoins.forEach((coin) => {
-        totalInvestment += coin.totalInvestment || 0;
-        totalValue += coin.currentValue || 0;
-      });
-
-      const totalProfitLoss = totalValue - totalInvestment;
-      const totalProfitLossPercentage =
-        totalInvestment > 0 ? (totalProfitLoss / totalInvestment) * 100 : 0;
-
-      // 创建处理后的投资组合
-      const processedPortfolio = {
-        coins: processedCoins,
-        totalInvestment,
-        totalValue,
-        totalProfitLoss,
-        totalProfitLossPercentage,
-      };
-
-      // 设置投资组合状态并保存到本地存储
-      setPortfolio(processedPortfolio);
-      savePortfolioToStorage(processedPortfolio);
-
+      setIsLoading(false);
       return true;
     } catch (err) {
       setError("Failed to import portfolio");
       console.error(err);
+      setIsLoading(false);
       return false;
     }
+  };
+
+  /**
+   * 处理投资组合数据，计算各项指标
+   * @param {Array} coins - 币种数据数组
+   * @returns {Object} 处理后的投资组合数据
+   */
+  const processPortfolioData = (coins) => {
+    // 处理每个币种的数据
+    const processedCoins = coins.map((coin) => {
+      // 计算持有量、总投资、平均买入价格等
+      let totalHoldings = 0;
+      let totalInvestment = 0;
+      let totalBuyAmount = 0;
+      let firstBuyDate = null;
+      let lastTransactionDate = null;
+
+      // 处理每笔交易
+      coin.transactions.forEach((tx) => {
+        const amount = tx.amount || 0;
+        const price = tx.price || 0;
+
+        // 更新交易日期信息
+        const txDate = new Date(tx.date);
+        if (!firstBuyDate && tx.type === "buy") {
+          firstBuyDate = txDate;
+        } else if (tx.type === "buy" && txDate < firstBuyDate) {
+          firstBuyDate = txDate;
+        }
+
+        if (!lastTransactionDate) {
+          lastTransactionDate = txDate;
+        } else if (txDate > lastTransactionDate) {
+          lastTransactionDate = txDate;
+        }
+
+        // 计算持有量
+        if (tx.type === "buy") {
+          totalHoldings += amount;
+          totalInvestment += amount * price;
+          totalBuyAmount += amount;
+        } else if (tx.type === "sell") {
+          totalHoldings -= amount;
+          // 这里使用简化的盈亏计算，实际应该使用FIFO等算法
+          totalInvestment = Math.max(
+            0,
+            totalInvestment - (amount / totalHoldings) * totalInvestment
+          );
+        }
+      });
+
+      // 计算平均买入价格
+      const averageBuyPrice =
+        totalBuyAmount > 0 ? totalInvestment / totalBuyAmount : 0;
+
+      // 计算当前价值和盈亏
+      const currentPrice = coin.currentPrice || 0;
+      const currentValue = totalHoldings * currentPrice;
+      const profitLoss = currentValue - totalInvestment;
+      const profitLossPercentage =
+        totalInvestment > 0 ? (profitLoss / totalInvestment) * 100 : 0;
+
+      // 返回处理后的币种数据
+      return {
+        ...coin,
+        holdings: totalHoldings,
+        totalInvestment,
+        averageBuyPrice,
+        currentValue,
+        profitLoss,
+        profitLossPercentage,
+        firstBuyDate: firstBuyDate ? firstBuyDate.toISOString() : null,
+        lastTransactionDate: lastTransactionDate
+          ? lastTransactionDate.toISOString()
+          : null,
+      };
+    });
+
+    // 计算投资组合总指标
+    let totalInvestment = 0;
+    let totalValue = 0;
+
+    processedCoins.forEach((coin) => {
+      totalInvestment += coin.totalInvestment || 0;
+      totalValue += coin.currentValue || 0;
+    });
+
+    const totalProfitLoss = totalValue - totalInvestment;
+    const totalProfitLossPercentage =
+      totalInvestment > 0 ? (totalProfitLoss / totalInvestment) * 100 : 0;
+
+    // 返回处理后的投资组合
+    return {
+      coins: processedCoins,
+      totalInvestment,
+      totalValue,
+      totalProfitLoss,
+      totalProfitLossPercentage,
+    };
   };
 
   /**
