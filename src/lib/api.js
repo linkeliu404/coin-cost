@@ -51,63 +51,108 @@ async function fetchCoinGeckoProxy(endpoint, params = {}) {
 }
 
 /**
- * 从Binance获取币种价格
- * @param {string} symbol - 币种符号，如BTC
- * @returns {Promise<Object|null>} - 价格数据
+ * 获取币安价格数据，使用更可靠的公共端点
+ * @param {string} symbol - 币种符号(带USDT后缀，例如 BTCUSDT)
+ * @returns {Promise<number|null>} - 返回价格或null
  */
 async function getBinancePrice(symbol) {
   try {
-    if (!symbol) return null;
+    // 使用 Binance 公共 API 端点，而不是通过本地代理
+    const response = await fetch(
+      `https://api1.binance.com/api/v3/ticker/price?symbol=${symbol}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
-    // 转换为Binance支持的格式（如BTC变为BTCUSDT）
-    const binanceSymbol = `${symbol.toUpperCase()}USDT`;
-
-    const response = await fetch(`/api/binance?symbol=${binanceSymbol}`);
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      console.warn(`Binance API warning: ${response.status} - ${errorText}`);
+      return null;
     }
+
     const data = await response.json();
-
-    if (!data || !data.lastPrice) {
-      throw new Error("Invalid Binance API response");
-    }
-
-    return {
-      symbol: symbol,
-      price: parseFloat(data.lastPrice),
-      price_change_24h: parseFloat(data.priceChange),
-      price_change_percentage_24h: parseFloat(data.priceChangePercent),
-    };
+    const price = parseFloat(data.price);
+    return isNaN(price) ? null : price;
   } catch (error) {
-    console.error(`Error fetching Binance price for ${symbol}:`, error);
+    console.warn("Binance price API error (will try fallback):", error);
     return null;
   }
 }
 
 /**
- * 合并币种数据，优先使用Binance的价格数据
- * @param {Object} coinGeckoData - CoinGecko数据
- * @returns {Promise<Object>} - 合并后的数据
+ * 获取 Binance K线数据，使用更可靠的公共端点
+ * @param {string} symbol - 币种符号(带USDT后缀，例如 BTCUSDT)
+ * @param {string} interval - 时间间隔，例如 1d, 4h, 1h
+ * @param {number} limit - 返回的K线数量
+ * @returns {Promise<Array|null>} - 返回K线数据或null
+ */
+async function getBinanceKlines(symbol, interval = "1d", limit = 7) {
+  try {
+    // 使用 Binance 公共 API 端点获取 K 线数据
+    const response = await fetch(
+      `https://api1.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(
+        `Binance Klines API warning: ${response.status} - ${errorText}`
+      );
+      return null;
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.warn("Binance klines API error (will try fallback):", error);
+    return null;
+  }
+}
+
+/**
+ * 使用 CoinGecko 作为主要数据源，币安作为备用
+ * @param {Object} coinGeckoData - CoinGecko返回的数据
+ * @returns {Promise<Object>} - 增强后的数据
  */
 async function enrichWithBinanceData(coinGeckoData) {
-  if (!coinGeckoData) return coinGeckoData;
+  try {
+    const symbol = coinGeckoData.symbol.toUpperCase();
+    const binanceSymbol = `${symbol}USDT`;
 
-  const binanceData = await getBinancePrice(coinGeckoData.symbol);
+    // 尝试从 Binance 获取价格
+    const binancePrice = await getBinancePrice(binanceSymbol);
 
-  if (binanceData) {
+    if (binancePrice !== null) {
+      // 如果 Binance 价格可用，则更新价格
+      const percentChange = coinGeckoData.price_change_percentage_24h || 0;
+
+      return {
+        ...coinGeckoData,
+        current_price: binancePrice,
+        binance_symbol: binanceSymbol,
+        binance_price_available: true,
+      };
+    }
+
+    // 如果 Binance 价格不可用，保留 CoinGecko 价格
     return {
       ...coinGeckoData,
-      binance_price: binanceData.price,
-      current_price: binanceData.price, // 优先使用Binance价格
-      price_change_percentage_24h: binanceData.price_change_percentage_24h,
-      price_source: "binance",
+      binance_price_available: false,
     };
+  } catch (error) {
+    console.warn("Error enriching with Binance data:", error);
+    return coinGeckoData;
   }
-
-  return {
-    ...coinGeckoData,
-    price_source: "coingecko",
-  };
 }
 
 /**
@@ -289,52 +334,55 @@ export const searchCryptocurrencies = async (query) => {
 };
 
 /**
- * 获取特定加密货币的详细信息
+ * 获取加密货币详情
  * @param {string} coinId - 加密货币ID
- * @returns {Promise<Object|null>} 加密货币详细信息
+ * @returns {Promise<Object>} - 加密货币详情
  */
 export const getCryptocurrencyDetails = async (coinId) => {
-  // 检查缓存
-  const now = Date.now();
-  if (
-    cache.coinDetails[coinId] &&
-    now - cache.coinDetails[coinId].timestamp < CACHE_EXPIRY
-  ) {
-    return cache.coinDetails[coinId].data;
-  }
-
   try {
-    const response = await fetchWithRetry(async () => {
-      return await fetchCoinGeckoProxy("coins/markets", {
-        vs_currency: "usd",
-        ids: coinId,
-        sparkline: true,
-        price_change_percentage: "24h,7d",
-      });
-    });
+    console.log(`Fetching details for coin ID: ${coinId}`);
+    const data = await fetchCoinGeckoProxy(
+      `coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`
+    );
 
-    if (!response.data[0]) return null;
-
-    // 增强数据
-    const enrichedData = await enrichWithBinanceData(response.data[0]);
-
-    // 更新缓存
-    cache.coinDetails[coinId] = {
-      data: enrichedData,
-      timestamp: now,
-    };
-
-    return enrichedData;
-  } catch (error) {
-    console.error(`Failed to fetch details for ${coinId}:`, error);
-
-    // 如果缓存存在但已过期，仍然返回它
-    if (cache.coinDetails[coinId]) {
-      console.log(`Returning stale cached data for ${coinId}`);
-      return cache.coinDetails[coinId].data;
+    if (!data || !data.id) {
+      throw new Error("Invalid cryptocurrency details response");
     }
 
-    return null;
+    // 构造基础响应对象
+    const response = {
+      id: data.id,
+      symbol: data.symbol,
+      name: data.name,
+      image:
+        data.image?.large ||
+        data.image?.small ||
+        `https://raw.githubusercontent.com/coinwink/cryptocurrency-logos/master/coins/32x32/${data.symbol.toLowerCase()}.png`,
+      current_price: data.market_data?.current_price?.usd || 0,
+      market_cap: data.market_data?.market_cap?.usd || 0,
+      market_cap_rank: data.market_data?.market_cap_rank || null,
+      fully_diluted_valuation:
+        data.market_data?.fully_diluted_valuation?.usd || 0,
+      total_volume: data.market_data?.total_volume?.usd || 0,
+      high_24h: data.market_data?.high_24h?.usd || 0,
+      low_24h: data.market_data?.low_24h?.usd || 0,
+      price_change_24h: data.market_data?.price_change_24h || 0,
+      price_change_percentage_24h:
+        data.market_data?.price_change_percentage_24h || 0,
+      market_cap_change_24h: data.market_data?.market_cap_change_24h || 0,
+      market_cap_change_percentage_24h:
+        data.market_data?.market_cap_change_percentage_24h || 0,
+      circulating_supply: data.market_data?.circulating_supply || 0,
+      total_supply: data.market_data?.total_supply || 0,
+      max_supply: data.market_data?.max_supply || 0,
+      last_updated: data.last_updated || new Date().toISOString(),
+    };
+
+    // 尝试用 Binance 数据丰富响应
+    return await enrichWithBinanceData(response);
+  } catch (error) {
+    console.error("Failed to fetch cryptocurrency details:", error);
+    throw new Error("Failed to fetch cryptocurrency details");
   }
 };
 
@@ -415,200 +463,248 @@ export const getMultipleCryptocurrencyDetails = async (coinIds) => {
 
 /**
  * 获取历史价格数据
- * @param {string} coinId - 币种ID
- * @param {string|number} days - 天数或时间范围字符串
- * @returns {Promise<Array<[number, number]>>} 历史价格数据数组
+ * @param {string} coinId - 加密货币ID
+ * @param {number} days - 天数
+ * @returns {Promise<Object>} - 历史价格数据
  */
-export const getHistoricalPriceData = async (coinId, days) => {
-  // 转换时间范围为天数
-  let daysValue = days;
-  if (typeof days === "string") {
-    switch (days) {
-      case "1d":
-        daysValue = 1;
-        break;
-      case "7d":
-        daysValue = 7;
-        break;
-      case "30d":
-        daysValue = 30;
-        break;
-      case "90d":
-        daysValue = 90;
-        break;
-      case "365d":
-        daysValue = 365;
-        break;
-      default:
-        daysValue = 7;
-    }
-  }
-
-  // 检查缓存
-  const cacheKey = `historical_${coinId}_${daysValue}`;
-  const cachedData = localStorage.getItem(cacheKey);
-  if (cachedData) {
-    const { data, timestamp } = JSON.parse(cachedData);
-    // 如果缓存数据不超过5分钟，直接返回
-    if (Date.now() - timestamp < 5 * 60 * 1000) {
-      return data;
-    }
-  }
-
+export const getHistoricalPriceData = async (coinId, days = 7) => {
   try {
-    const response = await fetch(
-      `${COINGECKO_API_URL}/coins/${coinId}/market_chart?vs_currency=usd&days=${daysValue}&interval=${
-        daysValue <= 7 ? "hourly" : "daily"
-      }`
+    console.log(
+      `Fetching historical price data for coin ID: ${coinId}, days: ${days}`
     );
 
-    if (!response.ok) {
-      throw new Error("Failed to fetch historical data");
+    // 首先查询基本信息以获取 symbol
+    const coinInfo = await fetchCoinGeckoProxy(
+      `coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`
+    );
+
+    if (!coinInfo || !coinInfo.symbol) {
+      throw new Error("Invalid coin information");
     }
 
-    const data = await response.json();
-    const prices = data.prices || [];
+    const symbol = coinInfo.symbol.toUpperCase();
+    const binanceSymbol = `${symbol}USDT`;
 
-    // 缓存数据
-    localStorage.setItem(
-      cacheKey,
-      JSON.stringify({
-        data: prices,
-        timestamp: Date.now(),
-      })
+    // 尝试使用 Binance API 获取 K 线数据
+    const interval = days <= 1 ? "1h" : days <= 7 ? "4h" : "1d";
+    const limit = days <= 1 ? 24 : days <= 7 ? 42 : Math.min(days, 90);
+
+    const binanceData = await getBinanceKlines(binanceSymbol, interval, limit);
+
+    if (binanceData && binanceData.length > 0) {
+      // 将 Binance K 线数据转换为 CoinGecko 格式
+      const prices = binanceData.map((kline) => [
+        parseInt(kline[0]), // timestamp
+        parseFloat(kline[4]), // close price
+      ]);
+
+      return {
+        [coinId]: {
+          prices,
+          market_caps: [],
+          total_volumes: [],
+          source: "binance",
+        },
+      };
+    }
+
+    // 如果 Binance 数据不可用，回退到 CoinGecko
+    const data = await fetchCoinGeckoProxy(
+      `coins/${coinId}/market_chart?vs_currency=usd&days=${days}`
     );
 
-    return prices;
+    if (!data || !data.prices || !data.prices.length) {
+      throw new Error("Invalid historical price data");
+    }
+
+    return {
+      [coinId]: {
+        ...data,
+        source: "coingecko",
+      },
+    };
   } catch (error) {
-    console.error("Error fetching historical price data:", error);
-    throw error;
+    console.error("Failed to fetch historical price data:", error);
+    // 返回一个空数据对象，避免整个应用崩溃
+    return {
+      [coinId]: {
+        prices: [],
+        market_caps: [],
+        total_volumes: [],
+        error: error.message,
+      },
+    };
   }
 };
 
 /**
- * 获取特定时间点的加密货币价格
+ * 获取特定时间的历史价格
  * @param {string} coinId - 加密货币ID
- * @param {Date|number} timestamp - 时间点的时间戳或Date对象
- * @returns {Promise<number|null>} 该时间点的价格，如果无法获取则返回null
+ * @param {number|Date} timestamp - 时间戳或日期对象
+ * @returns {Promise<number|null>} - 返回价格或null
  */
 export const getHistoricalPrice = async (coinId, timestamp) => {
-  if (!coinId || !timestamp) return null;
-
   // 确保timestamp是毫秒时间戳
-  const timeMs = timestamp instanceof Date ? timestamp.getTime() : timestamp;
+  const tsInMs =
+    timestamp instanceof Date
+      ? timestamp.getTime()
+      : typeof timestamp === "number"
+      ? timestamp
+      : new Date(timestamp).getTime();
 
-  // 转为秒时间戳，CoinGecko API使用的是秒级时间戳
-  const timeSec = Math.floor(timeMs / 1000);
-
-  // 检查缓存
-  const cacheKey = `${coinId}_${timeSec}`;
-  const now = Date.now();
-
-  // 临时使用新的缓存对象
-  if (!cache.historicalPrices) {
-    cache.historicalPrices = {};
-  }
-
-  if (
-    cache.historicalPrices[cacheKey] &&
-    now - cache.historicalPrices[cacheKey].timestamp < CACHE_EXPIRY * 10 // 历史价格缓存更久
-  ) {
-    return cache.historicalPrices[cacheKey].price;
-  }
+  // 转换为秒时间戳，因为CoinGecko API使用秒
+  const tsInSec = Math.floor(tsInMs / 1000);
 
   try {
-    // 对于30天内的数据，使用hourly数据
-    // 对于更早的数据，使用daily数据
-    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    console.log(
+      `Fetching historical price for coin: ${coinId}, timestamp: ${new Date(
+        tsInMs
+      ).toISOString()}`
+    );
 
-    // 最近30天的价格，使用hourly数据
-    if (timeMs > thirtyDaysAgo) {
-      const response = await fetchWithRetry(async () => {
-        // 获取前后一天的市场图表数据，确保能找到时间点
-        const fromDate = new Date(timeMs - 24 * 60 * 60 * 1000);
-        const toDate = new Date(timeMs + 24 * 60 * 60 * 1000);
+    // 检查缓存
+    const cacheKey = `${coinId}_${tsInSec}`;
+    // 这里实现了简单的内存缓存，实际项目中可能需要更复杂的缓存机制
+    if (window._priceCache && window._priceCache[cacheKey]) {
+      console.log("Retrieved price from cache");
+      return window._priceCache[cacheKey];
+    }
 
-        return await fetchCoinGeckoProxy(`coins/${coinId}/market_chart/range`, {
-          vs_currency: "usd",
-          from: Math.floor(fromDate.getTime() / 1000),
-          to: Math.floor(toDate.getTime() / 1000),
-        });
-      });
+    // 计算日期差异，决定使用哪个API
+    const now = Date.now();
+    const diffInDays = (now - tsInMs) / (1000 * 60 * 60 * 24);
 
-      // 找到最接近请求时间点的价格数据
-      if (
-        response.data &&
-        response.data.prices &&
-        response.data.prices.length > 0
-      ) {
-        let closestPrice = null;
-        let minTimeDiff = Infinity;
+    // 获取代币符号信息
+    const coinInfo = await fetchCoinGeckoProxy(
+      `coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`
+    );
 
-        for (const [dataTime, price] of response.data.prices) {
-          const timeDiff = Math.abs(dataTime - timeSec * 1000);
-          if (timeDiff < minTimeDiff) {
-            minTimeDiff = timeDiff;
-            closestPrice = price;
+    if (!coinInfo || !coinInfo.symbol) {
+      throw new Error("Failed to get coin symbol information");
+    }
+
+    const symbol = coinInfo.symbol.toUpperCase();
+    const binanceSymbol = `${symbol}USDT`;
+
+    // 尝试从Binance获取历史价格
+    if (diffInDays <= 30) {
+      try {
+        // 将日期转换为合适的区间
+        const interval = diffInDays <= 1 ? "1h" : diffInDays <= 7 ? "4h" : "1d";
+        const limit =
+          Math.ceil(diffInDays) *
+            (interval === "1h" ? 24 : interval === "4h" ? 6 : 1) +
+          5;
+
+        const klines = await getBinanceKlines(binanceSymbol, interval, limit);
+
+        if (klines && klines.length > 0) {
+          // 找到最接近的时间点
+          let closestKline = klines[0];
+          let minDiff = Math.abs(parseInt(klines[0][0]) - tsInMs);
+
+          for (let i = 1; i < klines.length; i++) {
+            const diff = Math.abs(parseInt(klines[i][0]) - tsInMs);
+            if (diff < minDiff) {
+              minDiff = diff;
+              closestKline = klines[i];
+            }
           }
-        }
 
-        // 更新缓存
-        cache.historicalPrices[cacheKey] = {
-          price: closestPrice,
-          timestamp: now,
-        };
+          const price = parseFloat(closestKline[4]); // 收盘价
+
+          // 缓存结果
+          if (!window._priceCache) window._priceCache = {};
+          window._priceCache[cacheKey] = price;
+
+          return price;
+        }
+      } catch (error) {
+        console.warn(
+          "Failed to get Binance historical price, falling back to CoinGecko",
+          error
+        );
+      }
+    }
+
+    // Binance数据不可用或时间太久远，使用CoinGecko API
+    // 决定使用哪个CoinGecko端点
+    if (diffInDays <= 30) {
+      // 过去30天用hourly数据
+      const hourlyData = await fetchCoinGeckoProxy(
+        `coins/${coinId}/market_chart?vs_currency=usd&days=${Math.ceil(
+          diffInDays
+        )}&interval=hourly`
+      );
+
+      if (hourlyData && hourlyData.prices && hourlyData.prices.length > 0) {
+        // 找到最接近的时间点
+        const closestPrice = findClosestPrice(hourlyData.prices, tsInMs);
+
+        // 缓存结果
+        if (!window._priceCache) window._priceCache = {};
+        window._priceCache[cacheKey] = closestPrice;
+
+        return closestPrice;
+      }
+    } else {
+      // 过去30天以上用daily数据
+      const dailyData = await fetchCoinGeckoProxy(
+        `coins/${coinId}/market_chart?vs_currency=usd&days=${Math.min(
+          Math.ceil(diffInDays),
+          365
+        )}&interval=daily`
+      );
+
+      if (dailyData && dailyData.prices && dailyData.prices.length > 0) {
+        // 找到最接近的时间点
+        const closestPrice = findClosestPrice(dailyData.prices, tsInMs);
+
+        // 缓存结果
+        if (!window._priceCache) window._priceCache = {};
+        window._priceCache[cacheKey] = closestPrice;
 
         return closestPrice;
       }
     }
-    // 更早的数据，尝试使用daily数据
-    else {
-      // 转换时间戳为日期字符串 (dd-mm-yyyy)
-      const date = new Date(timeMs);
-      const dateStr = `${date.getDate().toString().padStart(2, "0")}-${(
-        date.getMonth() + 1
-      )
-        .toString()
-        .padStart(2, "0")}-${date.getFullYear()}`;
 
-      const response = await fetchWithRetry(async () => {
-        return await fetchCoinGeckoProxy(`coins/${coinId}/history`, {
-          date: dateStr,
-        });
-      });
-
-      // 从历史数据中提取价格
-      if (
-        response.data &&
-        response.data.market_data &&
-        response.data.market_data.current_price
-      ) {
-        const price = response.data.market_data.current_price.usd;
-
-        // 更新缓存
-        cache.historicalPrices[cacheKey] = {
-          price,
-          timestamp: now,
-        };
-
-        return price;
-      }
-    }
-
-    // 如果无法获取价格，尝试估算价格
-    return await estimateHistoricalPrice(coinId, timeMs);
+    // 如果在CoinGecko也找不到数据，尝试估算历史价格
+    console.warn("Could not find exact historical price, trying estimation");
+    return await estimateHistoricalPrice(coinId, tsInMs);
   } catch (error) {
-    console.error(
-      `Failed to fetch historical price for ${coinId} at ${new Date(
-        timeMs
-      ).toISOString()}:`,
-      error
-    );
-
-    // 尝试估算价格
-    return await estimateHistoricalPrice(coinId, timeMs);
+    console.error("Failed to fetch historical price:", error);
+    // 如果所有API都失败，尝试估算价格
+    try {
+      return await estimateHistoricalPrice(coinId, tsInMs);
+    } catch (estError) {
+      console.error("Failed to estimate historical price:", estError);
+      return null;
+    }
   }
 };
+
+/**
+ * 找到最接近指定时间戳的价格
+ * @param {Array} prices - 价格数组，格式 [[timestamp, price], ...]
+ * @param {number} targetTimestamp - 目标时间戳
+ * @returns {number} - 最接近的价格
+ */
+function findClosestPrice(prices, targetTimestamp) {
+  if (!prices || !prices.length) return null;
+
+  let closestPrice = prices[0][1];
+  let minDiff = Math.abs(prices[0][0] - targetTimestamp);
+
+  for (let i = 1; i < prices.length; i++) {
+    const diff = Math.abs(prices[i][0] - targetTimestamp);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestPrice = prices[i][1];
+    }
+  }
+
+  return closestPrice;
+}
 
 /**
  * 估算历史价格（当无法获取确切价格时）
