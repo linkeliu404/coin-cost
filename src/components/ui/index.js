@@ -31,4 +31,3 @@ export {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-export { Skeleton } from "./skeleton";

@@ -301,7 +301,7 @@ const PortfolioCharts = ({ portfolio }) => {
           <CardTitle>投资组合分布</CardTitle>
         </CardHeader>
         <CardContent>
-          {portfolioChartData.datasets[0].data.length > 0 ? (
+          {portfolioChartData?.datasets?.[0]?.data?.length > 0 ? (
             <div className="flex flex-col md:flex-row gap-4">
               <div className="w-full md:w-1/2 h-56 md:h-80">
                 <Pie data={portfolioChartData} options={pieOptions} />
@@ -369,7 +369,7 @@ const PortfolioCharts = ({ portfolio }) => {
         </CardHeader>
         <CardContent>
           <div className="h-80">
-            {weeklyProfitChartData.datasets[0].data.length > 0 ? (
+            {weeklyProfitChartData?.datasets?.[0]?.data?.length > 0 ? (
               <Line data={weeklyProfitChartData} options={lineOptions} />
             ) : (
               <div className="flex justify-center items-center h-full text-muted-foreground">
