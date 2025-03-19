@@ -334,7 +334,54 @@ const TransactionFormDialog = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* 日期和历史价格区域 */}
+              {isLoadingPrice || (historicalPrice && historicalPrice.price) ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="dateTime" className="text-sm">
+                      日期 & 时间
+                    </Label>
+                    <Input
+                      id="dateTime"
+                      name="dateTime"
+                      type="datetime-local"
+                      value={formData.dateTime}
+                      onChange={handleDateTimeChange}
+                      className={cn(
+                        errors.dateTime && "border-destructive",
+                        "text-sm"
+                      )}
+                      required
+                    />
+                    {errors.dateTime && (
+                      <p className="text-xs text-destructive">
+                        {errors.dateTime}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">当时价格</Label>
+
+                    {isLoadingPrice ? (
+                      <div className="flex items-center h-10 text-sm text-muted-foreground">
+                        <FiClock className="mr-1 h-4 w-4" />
+                        加载中...
+                      </div>
+                    ) : historicalPrice && historicalPrice.price ? (
+                      <button
+                        type="button"
+                        onClick={useHistoricalPrice}
+                        className="h-10 px-3 rounded border border-input bg-transparent text-sm flex items-center text-primary hover:bg-accent hover:text-accent-foreground transition-colors"
+                      >
+                        <FiClock className="mr-2 h-4 w-4" />$
+                        {historicalPrice.price.toLocaleString()}
+                        {historicalPrice.isEstimated && " (估)"}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
                 <div className="space-y-2">
                   <Label htmlFor="dateTime" className="text-sm">
                     日期 & 时间
@@ -357,32 +404,7 @@ const TransactionFormDialog = ({
                     </p>
                   )}
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm">当时价格</Label>
-
-                  {isLoadingPrice ? (
-                    <div className="flex items-center h-10 text-sm text-muted-foreground">
-                      <FiClock className="mr-1 h-4 w-4" />
-                      加载中...
-                    </div>
-                  ) : historicalPrice && historicalPrice.price ? (
-                    <button
-                      type="button"
-                      onClick={useHistoricalPrice}
-                      className="h-10 px-3 rounded border border-input bg-transparent text-sm flex items-center text-primary hover:bg-accent hover:text-accent-foreground transition-colors"
-                    >
-                      <FiClock className="mr-2 h-4 w-4" />$
-                      {historicalPrice.price.toLocaleString()}
-                      {historicalPrice.isEstimated && " (估)"}
-                    </button>
-                  ) : (
-                    <div className="h-10 flex items-center text-sm text-muted-foreground">
-                      暂无历史价格
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
 
               <div>
                 <button

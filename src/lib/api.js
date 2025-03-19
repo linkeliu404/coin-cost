@@ -415,46 +415,73 @@ export const getMultipleCryptocurrencyDetails = async (coinIds) => {
 
 /**
  * 获取历史价格数据
- * @param {string} coinId - 加密货币ID
- * @param {number} days - 天数
- * @returns {Promise<Object>} 历史价格数据
+ * @param {string} coinId - 币种ID
+ * @param {string|number} days - 天数或时间范围字符串
+ * @returns {Promise<Array<[number, number]>>} 历史价格数据数组
  */
-export const getHistoricalPriceData = async (coinId, days = 7) => {
+export const getHistoricalPriceData = async (coinId, days) => {
+  // 转换时间范围为天数
+  let daysValue = days;
+  if (typeof days === "string") {
+    switch (days) {
+      case "1d":
+        daysValue = 1;
+        break;
+      case "7d":
+        daysValue = 7;
+        break;
+      case "30d":
+        daysValue = 30;
+        break;
+      case "90d":
+        daysValue = 90;
+        break;
+      case "365d":
+        daysValue = 365;
+        break;
+      default:
+        daysValue = 7;
+    }
+  }
+
   // 检查缓存
-  const cacheKey = `${coinId}_${days}`;
-  const now = Date.now();
-  if (
-    cache.marketData[cacheKey] &&
-    now - cache.marketData[cacheKey].timestamp < CACHE_EXPIRY
-  ) {
-    return { [coinId]: cache.marketData[cacheKey].data };
+  const cacheKey = `historical_${coinId}_${daysValue}`;
+  const cachedData = localStorage.getItem(cacheKey);
+  if (cachedData) {
+    const { data, timestamp } = JSON.parse(cachedData);
+    // 如果缓存数据不超过5分钟，直接返回
+    if (Date.now() - timestamp < 5 * 60 * 1000) {
+      return data;
+    }
   }
 
   try {
-    const response = await fetchWithRetry(async () => {
-      return await fetchCoinGeckoProxy(`coins/${coinId}/market_chart`, {
-        vs_currency: "usd",
-        days,
-      });
-    });
+    const response = await fetch(
+      `${COINGECKO_API_URL}/coins/${coinId}/market_chart?vs_currency=usd&days=${daysValue}&interval=${
+        daysValue <= 7 ? "hourly" : "daily"
+      }`
+    );
 
-    // 更新缓存
-    cache.marketData[cacheKey] = {
-      data: response.data,
-      timestamp: now,
-    };
-
-    return { [coinId]: response.data };
-  } catch (error) {
-    console.error(`Failed to fetch historical data for ${coinId}:`, error);
-
-    // 如果缓存存在但已过期，仍然返回它
-    if (cache.marketData[cacheKey]) {
-      console.log(`Returning stale historical data for ${coinId}`);
-      return { [coinId]: cache.marketData[cacheKey].data };
+    if (!response.ok) {
+      throw new Error("Failed to fetch historical data");
     }
 
-    return { [coinId]: { prices: [] } };
+    const data = await response.json();
+    const prices = data.prices || [];
+
+    // 缓存数据
+    localStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        data: prices,
+        timestamp: Date.now(),
+      })
+    );
+
+    return prices;
+  } catch (error) {
+    console.error("Error fetching historical price data:", error);
+    throw error;
   }
 };
 
