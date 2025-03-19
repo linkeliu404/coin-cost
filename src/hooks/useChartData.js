@@ -47,7 +47,7 @@ export const useChartData = (portfolio, timeRange = "7d") => {
 
   // 获取历史数据
   const fetchHistoricalData = async () => {
-    if (!portfolio || portfolio.length === 0) {
+    if (!portfolio || !portfolio.coins || portfolio.coins.length === 0) {
       setIsLoading(false);
       return;
     }
@@ -57,7 +57,7 @@ export const useChartData = (portfolio, timeRange = "7d") => {
 
     try {
       // 获取每个币种的历史数据
-      const historicalDataPromises = portfolio.map(async (coin) => {
+      const historicalDataPromises = portfolio.coins.map(async (coin) => {
         const data = await getHistoricalPriceData(coin.id, timeRange);
         return {
           id: coin.id,
@@ -69,17 +69,13 @@ export const useChartData = (portfolio, timeRange = "7d") => {
       const historicalData = await Promise.all(historicalDataPromises);
 
       // 处理投资组合分布数据
-      const totalValue = portfolio.reduce(
-        (sum, coin) => sum + coin.currentValue,
-        0
-      );
-      const colors = generateColors(portfolio.length);
+      const colors = generateColors(portfolio.coins.length);
 
       setPortfolioChartData({
-        labels: portfolio.map((coin) => coin.symbol.toUpperCase()),
+        labels: portfolio.coins.map((coin) => coin.symbol.toUpperCase()),
         datasets: [
           {
-            data: portfolio.map((coin) => coin.currentValue),
+            data: portfolio.coins.map((coin) => coin.currentValue),
             backgroundColor: colors,
             borderColor: colors,
             borderWidth: 1,
