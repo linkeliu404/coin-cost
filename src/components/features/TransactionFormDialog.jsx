@@ -252,6 +252,10 @@ const TransactionFormDialog = ({
   const reasonPlaceholder =
     activeTab === "buy" ? "输入买入理由（可选）" : "输入卖出理由（可选）";
 
+  // 判断是否要显示历史价格组件
+  const showHistoricalPrice =
+    isLoadingPrice || (historicalPrice && historicalPrice.price);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-[95vw] w-full sm:max-w-[500px] p-4 sm:p-6 overflow-y-auto max-h-[90vh]">
@@ -334,8 +338,7 @@ const TransactionFormDialog = ({
                 )}
               </div>
 
-              {/* 日期和历史价格区域 */}
-              {isLoadingPrice || (historicalPrice && historicalPrice.price) ? (
+              {showHistoricalPrice ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="dateTime" className="text-sm">

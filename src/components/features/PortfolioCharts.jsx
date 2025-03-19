@@ -22,11 +22,8 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-  TabsContent,
 } from "@/components/ui";
 import { useChartData } from "@/hooks/useChartData";
-import PieChart from "./PieChart";
-import LineChart from "./LineChart";
 
 // 注册Chart.js组件
 ChartJS.register(
@@ -52,122 +49,334 @@ ChartJS.register(
  * @returns {JSX.Element}
  */
 const PortfolioCharts = ({ portfolio }) => {
-  const [timeRange, setTimeRange] = useState("7d");
+  const [timeRange, setTimeRange] = useState("24h");
+
   const {
     portfolioChartData,
-    profitChartData,
+    weeklyProfitChartData,
     isLoading,
     error,
     retryFetchHistoricalData,
-  } = useChartData(portfolio, timeRange);
+  } = useChartData(portfolio);
 
   // 计算每个币种的百分比
   const coinPercentages = useMemo(() => {
-    if (!portfolio || portfolio.coins.length === 0) return [];
-
-    const totalValue = portfolio.totalValue || 0;
+    if (
+      !portfolio ||
+      !portfolio.coins ||
+      !portfolio.totalValue ||
+      portfolio.totalValue === 0
+    ) {
+      return [];
+    }
 
     return portfolio.coins
       .map((coin) => ({
-        id: coin.id,
-        symbol: coin.symbol,
-        percentage: (coin.currentValue / totalValue) * 100,
-        color: getColorForCoin(coin.id, portfolioChartData),
+        symbol: coin.symbol.toUpperCase(),
+        name: coin.name,
+        value: coin.currentValue,
+        percentage: (coin.currentValue / portfolio.totalValue) * 100,
+        color:
+          portfolioChartData.datasets[0]?.backgroundColor?.[
+            portfolioChartData.labels.findIndex(
+              (label) => label === coin.symbol.toUpperCase()
+            )
+          ] || "rgba(209, 213, 219, 0.7)",
+        isProfitable: coin.profitLoss > 0,
       }))
-      .sort((a, b) => b.percentage - a.percentage); // 按百分比降序排序
+      .sort((a, b) => b.percentage - a.percentage);
   }, [portfolio, portfolioChartData]);
 
-  // 获取币种的图表颜色
-  const getColorForCoin = (coinId, chartData) => {
-    if (!chartData || !chartData.datasets || !chartData.datasets[0]) {
-      return "#cccccc";
-    }
-
-    const index = chartData.labels.findIndex(
-      (label) =>
-        label.toLowerCase() ===
-        portfolio.coins.find((c) => c.id === coinId)?.symbol.toUpperCase()
-    );
-
-    return index >= 0
-      ? chartData.datasets[0].backgroundColor[index]
-      : "#cccccc";
-  };
-
-  // 处理时间范围变化
-  const handleTimeRangeChange = (value) => {
-    setTimeRange(value);
-  };
-
-  // 如果没有投资组合数据，显示空状态
   if (!portfolio || portfolio.coins.length === 0) {
     return (
-      <div className="p-4 bg-card rounded-lg shadow-sm">
-        <h3 className="text-lg font-medium mb-4">投资组合分析</h3>
-        <div className="text-center p-6 bg-muted/30 rounded-md">
-          <p className="text-muted-foreground">
-            添加加密货币后，这里会显示分析图表
-          </p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>投资组合分布</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 text-muted-foreground">
+              暂无投资数据
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>收益走势</CardTitle>
+            <Tabs value="24h" className="w-auto">
+              <TabsList className="h-8">
+                <TabsTrigger value="24h" className="text-xs px-2 h-7">
+                  24h
+                </TabsTrigger>
+                <TabsTrigger value="7d" className="text-xs px-2 h-7">
+                  7d
+                </TabsTrigger>
+                <TabsTrigger value="1m" className="text-xs px-2 h-7">
+                  1m
+                </TabsTrigger>
+                <TabsTrigger value="3m" className="text-xs px-2 h-7">
+                  3m
+                </TabsTrigger>
+                <TabsTrigger value="1y" className="text-xs px-2 h-7">
+                  1y
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 text-muted-foreground">
+              暂无投资数据
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  // 错误状态
-  if (error && !isLoading) {
+  if (isLoading) {
     return (
-      <div className="p-4 bg-card rounded-lg shadow-sm">
-        <h3 className="text-lg font-medium mb-4">投资组合分析</h3>
-        <div className="text-center p-6 bg-destructive/10 rounded-md">
-          <p className="text-destructive mb-2">{error}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={retryFetchHistoricalData}
-          >
-            重试
-          </Button>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>投资组合分布</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-center items-center py-16">
+              <Spinner size="lg" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>收益走势</CardTitle>
+            <Tabs value="24h" className="w-auto">
+              <TabsList className="h-8">
+                <TabsTrigger value="24h" className="text-xs px-2 h-7">
+                  24h
+                </TabsTrigger>
+                <TabsTrigger value="7d" className="text-xs px-2 h-7">
+                  7d
+                </TabsTrigger>
+                <TabsTrigger value="1m" className="text-xs px-2 h-7">
+                  1m
+                </TabsTrigger>
+                <TabsTrigger value="3m" className="text-xs px-2 h-7">
+                  3m
+                </TabsTrigger>
+                <TabsTrigger value="1y" className="text-xs px-2 h-7">
+                  1y
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-center items-center py-16">
+              <Spinner size="lg" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
+
+  if (error) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>投资组合分布</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8">
+              <div className="text-destructive mb-4">{error}</div>
+              <Button
+                variant="outline"
+                onClick={retryFetchHistoricalData}
+                disabled={isLoading}
+              >
+                重试
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>收益走势</CardTitle>
+            <Tabs value="24h" className="w-auto">
+              <TabsList className="h-8">
+                <TabsTrigger value="24h" className="text-xs px-2 h-7">
+                  24h
+                </TabsTrigger>
+                <TabsTrigger value="7d" className="text-xs px-2 h-7">
+                  7d
+                </TabsTrigger>
+                <TabsTrigger value="1m" className="text-xs px-2 h-7">
+                  1m
+                </TabsTrigger>
+                <TabsTrigger value="3m" className="text-xs px-2 h-7">
+                  3m
+                </TabsTrigger>
+                <TabsTrigger value="1y" className="text-xs px-2 h-7">
+                  1y
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8">
+              <div className="text-destructive mb-4">{error}</div>
+              <Button
+                variant="outline"
+                onClick={retryFetchHistoricalData}
+                disabled={isLoading}
+              >
+                重试
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const pieOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const label = context.label || "";
+            const value = context.raw || 0;
+            const total = context.chart.getDatasetMeta(0).total;
+            const percentage = Math.round((value / total) * 100);
+            return `${label}: $${value.toLocaleString()} (${percentage}%)`;
+          },
+        },
+      },
+    },
+  };
+
+  const lineOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const value = context.raw || 0;
+            return `$${value.toLocaleString()}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+      },
+      y: {
+        ticks: {
+          callback: (value) => `$${value.toLocaleString()}`,
+        },
+      },
+    },
+  };
+
+  const handleTimeRangeChange = (value) => {
+    setTimeRange(value);
+    // 这里可以添加逻辑来获取不同时间范围的数据
+  };
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
       <Card>
         <CardHeader>
           <CardTitle>投资组合分布</CardTitle>
         </CardHeader>
         <CardContent>
-          <PieChart
-            data={portfolioChartData}
-            loading={isLoading}
-            portfolio={portfolio}
-          />
+          {portfolioChartData.datasets[0].data.length > 0 ? (
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="w-full md:w-1/2 h-56 md:h-80">
+                <Pie data={portfolioChartData} options={pieOptions} />
+              </div>
+              <div className="w-full md:w-1/2 h-56 md:h-80 overflow-y-auto">
+                <div className="space-y-3 pr-2">
+                  {coinPercentages.map((coin, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center">
+                        <div
+                          className="w-3 h-3 rounded-full mr-2"
+                          style={{ backgroundColor: coin.color }}
+                        ></div>
+                        <span className="text-sm font-medium">
+                          {coin.symbol}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm font-bold">
+                          {coin.percentage.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-center items-center h-80 text-muted-foreground">
+              暂无数据可显示
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>收益走势</CardTitle>
+          <Tabs
+            value={timeRange}
+            onValueChange={handleTimeRangeChange}
+            className="w-auto"
+          >
+            <TabsList className="h-8">
+              <TabsTrigger value="24h" className="text-xs px-2 h-7">
+                24h
+              </TabsTrigger>
+              <TabsTrigger value="7d" className="text-xs px-2 h-7">
+                7d
+              </TabsTrigger>
+              <TabsTrigger value="1m" className="text-xs px-2 h-7">
+                1m
+              </TabsTrigger>
+              <TabsTrigger value="3m" className="text-xs px-2 h-7">
+                3m
+              </TabsTrigger>
+              <TabsTrigger value="1y" className="text-xs px-2 h-7">
+                1y
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="7d" onValueChange={handleTimeRangeChange}>
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="1d">24h</TabsTrigger>
-              <TabsTrigger value="7d">7天</TabsTrigger>
-              <TabsTrigger value="30d">30天</TabsTrigger>
-              <TabsTrigger value="90d">90天</TabsTrigger>
-              <TabsTrigger value="365d">1年</TabsTrigger>
-            </TabsList>
-            <TabsContent value={timeRange}>
-              <LineChart
-                data={profitChartData}
-                loading={isLoading}
-                timeRange={timeRange}
-              />
-            </TabsContent>
-          </Tabs>
+          <div className="h-80">
+            {weeklyProfitChartData.datasets[0].data.length > 0 ? (
+              <Line data={weeklyProfitChartData} options={lineOptions} />
+            ) : (
+              <div className="flex justify-center items-center h-full text-muted-foreground">
+                暂无数据可显示
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
