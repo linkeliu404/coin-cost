@@ -267,7 +267,7 @@ export default function Home() {
                   id: crypto.randomUUID(),
                   symbol: coinSymbol,
                   name: (tx["币种名称"] || coinSymbol).toUpperCase(),
-                  image: `https://assets.coingecko.com/coins/images/1/small/${coinSymbol}.png`,
+                  image: `https://s2.coinmarketcap.com/static/img/coins/64x64/${coinSymbol.toLowerCase()}.png`,
                   currentPrice: price,
                   holdings: 0, // 将在 refreshPortfolio 中计算
                   averageBuyPrice: 0, // 将在 refreshPortfolio 中计算

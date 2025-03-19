@@ -122,6 +122,12 @@ const CoinList = ({
                           src={coin.image}
                           alt={coin.name}
                           className="h-8 w-8 rounded-full mr-3"
+                          onError={(e) => {
+                            e.target.src =
+                              "https://via.placeholder.com/32?text=" +
+                              coin.symbol.charAt(0).toUpperCase();
+                            e.target.onerror = null; // 防止循环触发
+                          }}
                         />
                         <div>
                           <div className="font-medium">{coin.name}</div>
