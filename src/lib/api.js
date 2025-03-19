@@ -19,6 +19,50 @@ const cache = {
   historicalPrices: {},
 };
 
+// 初始化API错误跟踪
+if (typeof window !== "undefined") {
+  window._apiErrors = window._apiErrors || [];
+
+  // 添加记录API错误的方法
+  window.trackApiError = (endpoint, error) => {
+    const errorInfo = {
+      timestamp: new Date().toISOString(),
+      endpoint,
+      error:
+        typeof error === "object"
+          ? { message: error.message, stack: error.stack, name: error.name }
+          : String(error),
+    };
+
+    console.error(`API Error [${endpoint}]:`, error);
+    window._apiErrors.push(errorInfo);
+
+    // 最多保留最近50条错误记录
+    if (window._apiErrors.length > 50) {
+      window._apiErrors.shift();
+    }
+
+    return errorInfo;
+  };
+
+  // 显示API错误弹窗的方法
+  window.showApiErrors = () => {
+    if (!window._apiErrors || window._apiErrors.length === 0) {
+      alert("没有记录到API错误");
+      return;
+    }
+
+    const errorMessage = window._apiErrors
+      .map(
+        (err) =>
+          `${err.timestamp} [${err.endpoint}]: ${JSON.stringify(err.error)}`
+      )
+      .join("\n\n");
+
+    alert(`最近API错误 (${window._apiErrors.length}):\n\n${errorMessage}`);
+  };
+}
+
 // 辅助函数：重试机制
 async function fetchWithRetry(fetcher, retries = 3, delay = 1000) {
   try {
@@ -37,16 +81,32 @@ async function fetchWithRetry(fetcher, retries = 3, delay = 1000) {
  * @returns {Promise<Object>} 响应数据
  */
 async function fetchCoinGeckoProxy(endpoint, params = {}) {
-  // 在生产环境中使用代理，在开发环境中直接调用API
-  if (isProduction) {
-    const searchParams = new URLSearchParams({
-      endpoint,
-      ...params,
-    });
+  try {
+    // 在生产环境中使用代理，在开发环境中直接调用API
+    let response;
 
-    return axios.get(`/api/coingecko?${searchParams.toString()}`);
-  } else {
-    return axios.get(`${COINGECKO_API_URL}/${endpoint}`, { params });
+    if (isProduction) {
+      const searchParams = new URLSearchParams({
+        endpoint,
+        ...params,
+      });
+
+      response = await axios.get(`/api/coingecko?${searchParams.toString()}`);
+    } else {
+      response = await axios.get(`${COINGECKO_API_URL}/${endpoint}`, {
+        params,
+      });
+    }
+
+    return response.data;
+  } catch (error) {
+    // 记录错误
+    if (typeof window !== "undefined") {
+      window.trackApiError(`CoinGecko[${endpoint}]`, error);
+    }
+
+    // 重新抛出错误
+    throw error;
   }
 }
 
@@ -70,7 +130,18 @@ async function getBinancePrice(symbol) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Binance API warning: ${response.status} - ${errorText}`);
+      const errorMsg = `Binance API warning: ${response.status} - ${errorText}`;
+      console.warn(errorMsg);
+
+      // 记录错误
+      if (typeof window !== "undefined") {
+        window.trackApiError(`BinancePrice[${symbol}]`, {
+          message: errorMsg,
+          status: response.status,
+          details: errorText,
+        });
+      }
+
       return null;
     }
 
@@ -79,6 +150,12 @@ async function getBinancePrice(symbol) {
     return isNaN(price) ? null : price;
   } catch (error) {
     console.warn("Binance price API error (will try fallback):", error);
+
+    // 记录错误
+    if (typeof window !== "undefined") {
+      window.trackApiError(`BinancePrice[${symbol}]`, error);
+    }
+
     return null;
   }
 }
@@ -181,7 +258,7 @@ export const getTopCryptocurrencies = async (limit = 50) => {
 
     // 增强数据
     const enrichedData = await Promise.all(
-      response.data.map((coin) => enrichWithBinanceData(coin))
+      response.map((coin) => enrichWithBinanceData(coin))
     );
 
     // 更新缓存
@@ -193,6 +270,11 @@ export const getTopCryptocurrencies = async (limit = 50) => {
     return enrichedData.slice(0, limit);
   } catch (error) {
     console.error("Failed to fetch top cryptocurrencies:", error);
+
+    // 记录错误
+    if (typeof window !== "undefined") {
+      window.trackApiError("getTopCryptocurrencies", error);
+    }
 
     // 如果缓存存在但已过期，仍然返回它
     if (cache.topCoins.data) {

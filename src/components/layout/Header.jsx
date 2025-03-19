@@ -1,5 +1,5 @@
 import React from "react";
-import { FiPlus, FiRefreshCw } from "react-icons/fi";
+import { FiPlus, FiRefreshCw, FiAlertTriangle } from "react-icons/fi";
 import { Button } from "@/components/ui";
 
 /**
@@ -15,11 +15,29 @@ import { Button } from "@/components/ui";
  * @returns {JSX.Element}
  */
 const Header = ({ onAddCrypto, onRefresh, isRefreshing }) => {
+  // 显示API错误信息
+  const handleShowApiErrors = () => {
+    if (typeof window !== "undefined" && window.showApiErrors) {
+      window.showApiErrors();
+    } else {
+      alert("API错误跟踪未初始化");
+    }
+  };
+
   return (
     <header className="bg-primary text-primary-foreground p-4 shadow-md">
       <div className="container mx-auto flex justify-between items-center">
         <h1 className="text-xl font-bold">CryptoCost</h1>
         <div className="flex space-x-2">
+          <Button
+            onClick={handleShowApiErrors}
+            variant="outline"
+            size="sm"
+            className="flex items-center text-yellow-500"
+            title="显示API错误信息"
+          >
+            <FiAlertTriangle className="h-4 w-4" />
+          </Button>
           <Button
             onClick={onRefresh}
             disabled={isRefreshing}
