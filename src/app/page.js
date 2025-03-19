@@ -224,44 +224,66 @@ export default function Home() {
               return record;
             });
 
+          // 检查交易数据是否有效
+          if (!transactions.length || !transactions[0]["币种"]) {
+            setImportError("导入失败：CSV 文件格式不正确");
+            return;
+          }
+
           // 转换为投资组合数据格式
           data = {
             coins: transactions.reduce((acc, tx) => {
+              // 确保币种字段存在
+              if (!tx["币种"]) return acc;
+
               const coinSymbol = tx["币种"].toLowerCase();
               const existingCoin = acc.find(
                 (c) => c.symbol.toLowerCase() === coinSymbol
               );
 
+              // 解析数值，确保它们是有效的数字
+              const amount = parseFloat(tx["数量"] || 0);
+              const price = parseFloat(tx["价格(USD)"] || 0);
+
+              if (isNaN(amount) || isNaN(price)) {
+                console.warn("忽略无效的交易数据:", tx);
+                return acc;
+              }
+
+              const transaction = {
+                id: crypto.randomUUID(),
+                type: tx["类型"] === "买入" ? "buy" : "sell",
+                amount,
+                price,
+                date: tx["日期"] || new Date().toISOString(),
+                reason: tx["备注"] || "",
+              };
+
               if (existingCoin) {
-                existingCoin.transactions.push({
-                  id: crypto.randomUUID(),
-                  type: tx["类型"] === "买入" ? "buy" : "sell",
-                  amount: parseFloat(tx["数量"]),
-                  price: parseFloat(tx["价格(USD)"]),
-                  date: tx["日期"],
-                  reason: tx["备注"] || "",
-                });
+                existingCoin.transactions.push(transaction);
               } else {
+                // 为新币种创建合适的默认值
                 acc.push({
                   id: crypto.randomUUID(),
                   symbol: coinSymbol,
-                  name: coinSymbol.toUpperCase(),
+                  name: (tx["币种名称"] || coinSymbol).toUpperCase(),
                   image: `https://assets.coingecko.com/coins/images/1/small/${coinSymbol}.png`,
-                  currentPrice: parseFloat(tx["价格(USD)"]),
-                  transactions: [
-                    {
-                      id: crypto.randomUUID(),
-                      type: tx["类型"] === "买入" ? "buy" : "sell",
-                      amount: parseFloat(tx["数量"]),
-                      price: parseFloat(tx["价格(USD)"]),
-                      date: tx["日期"],
-                      reason: tx["备注"] || "",
-                    },
-                  ],
+                  currentPrice: price,
+                  holdings: 0, // 将在 refreshPortfolio 中计算
+                  averageBuyPrice: 0, // 将在 refreshPortfolio 中计算
+                  totalInvestment: 0, // 将在 refreshPortfolio 中计算
+                  currentValue: 0, // 将在 refreshPortfolio 中计算
+                  profitLoss: 0, // 将在 refreshPortfolio 中计算
+                  profitLossPercentage: 0, // 将在 refreshPortfolio 中计算
+                  transactions: [transaction],
                 });
               }
               return acc;
             }, []),
+            totalInvestment: 0, // 将在 refreshPortfolio 中计算
+            totalValue: 0, // 将在 refreshPortfolio 中计算
+            totalProfitLoss: 0, // 将在 refreshPortfolio 中计算
+            totalProfitLossPercentage: 0, // 将在 refreshPortfolio 中计算
           };
         } else {
           // 处理JSON文件

@@ -4,6 +4,12 @@ import axios from "axios";
 const COINGECKO_API_URL = "https://api.coingecko.com/api/v3";
 const BINANCE_API_URL = "https://api.binance.com/api/v3";
 
+// 判断是否在生产环境
+const isProduction = process.env.NODE_ENV === "production";
+
+// API基础URL
+const API_BASE_URL = isProduction ? "" : "";
+
 // 缓存配置
 const CACHE_EXPIRY = 5 * 60 * 1000; // 5分钟缓存
 const cache = {
@@ -20,6 +26,26 @@ async function fetchWithRetry(fetcher, retries = 3, delay = 1000) {
     if (retries <= 0) throw error;
     await new Promise((resolve) => setTimeout(resolve, delay));
     return fetchWithRetry(fetcher, retries - 1, delay * 1.5);
+  }
+}
+
+/**
+ * 获取CoinGecko数据的代理函数
+ * @param {string} endpoint - API端点路径
+ * @param {Object} params - 请求参数
+ * @returns {Promise<Object>} 响应数据
+ */
+async function fetchCoinGeckoProxy(endpoint, params = {}) {
+  // 在生产环境中使用代理，在开发环境中直接调用API
+  if (isProduction) {
+    const searchParams = new URLSearchParams({
+      endpoint,
+      ...params,
+    });
+
+    return axios.get(`/api/coingecko?${searchParams.toString()}`);
+  } else {
+    return axios.get(`${COINGECKO_API_URL}/${endpoint}`, { params });
   }
 }
 
@@ -97,15 +123,13 @@ export const getTopCryptocurrencies = async (limit = 50) => {
 
   try {
     const response = await fetchWithRetry(async () => {
-      return await axios.get(`${COINGECKO_API_URL}/coins/markets`, {
-        params: {
-          vs_currency: "usd",
-          order: "market_cap_desc",
-          per_page: Math.min(100, limit), // CoinGecko限制
-          page: 1,
-          sparkline: true,
-          price_change_percentage: "24h,7d",
-        },
+      return await fetchCoinGeckoProxy("coins/markets", {
+        vs_currency: "usd",
+        order: "market_cap_desc",
+        per_page: Math.min(100, limit),
+        page: 1,
+        sparkline: true,
+        price_change_percentage: "24h,7d",
       });
     });
 
@@ -149,13 +173,11 @@ export const searchCryptocurrencies = async (query) => {
     // 如果是合约地址
     if (isContractAddress) {
       const response = await fetchWithRetry(async () => {
-        return await axios.get(`${COINGECKO_API_URL}/coins/markets`, {
-          params: {
-            vs_currency: "usd",
-            order: "market_cap_desc",
-            sparkline: false,
-            price_change_percentage: "24h",
-          },
+        return await fetchCoinGeckoProxy("coins/markets", {
+          vs_currency: "usd",
+          order: "market_cap_desc",
+          sparkline: false,
+          price_change_percentage: "24h",
         });
       });
 
@@ -187,9 +209,7 @@ export const searchCryptocurrencies = async (query) => {
 
       // 使用CoinGecko搜索API
       const response = await fetchWithRetry(async () => {
-        return await axios.get(`${COINGECKO_API_URL}/search`, {
-          params: { query },
-        });
+        return await fetchCoinGeckoProxy("search", { query });
       });
 
       // 搜索API只返回基本信息，需要获取详细信息
@@ -200,14 +220,12 @@ export const searchCryptocurrencies = async (query) => {
       // 获取详细信息
       const coinIds = coins.map((coin) => coin.id).join(",");
       const detailsResponse = await fetchWithRetry(async () => {
-        return await axios.get(`${COINGECKO_API_URL}/coins/markets`, {
-          params: {
-            vs_currency: "usd",
-            ids: coinIds,
-            order: "market_cap_desc",
-            sparkline: false,
-            price_change_percentage: "24h",
-          },
+        return await fetchCoinGeckoProxy("coins/markets", {
+          vs_currency: "usd",
+          ids: coinIds,
+          order: "market_cap_desc",
+          sparkline: false,
+          price_change_percentage: "24h",
         });
       });
 
@@ -239,13 +257,11 @@ export const getCryptocurrencyDetails = async (coinId) => {
 
   try {
     const response = await fetchWithRetry(async () => {
-      return await axios.get(`${COINGECKO_API_URL}/coins/markets`, {
-        params: {
-          vs_currency: "usd",
-          ids: coinId,
-          sparkline: true,
-          price_change_percentage: "24h,7d",
-        },
+      return await fetchCoinGeckoProxy("coins/markets", {
+        vs_currency: "usd",
+        ids: coinId,
+        sparkline: true,
+        price_change_percentage: "24h,7d",
       });
     });
 
@@ -304,13 +320,11 @@ export const getMultipleCryptocurrencyDetails = async (coinIds) => {
 
   try {
     const response = await fetchWithRetry(async () => {
-      return await axios.get(`${COINGECKO_API_URL}/coins/markets`, {
-        params: {
-          vs_currency: "usd",
-          ids: coinsToFetch.join(","),
-          sparkline: true,
-          price_change_percentage: "24h,7d",
-        },
+      return await fetchCoinGeckoProxy("coins/markets", {
+        vs_currency: "usd",
+        ids: coinsToFetch.join(","),
+        sparkline: true,
+        price_change_percentage: "24h,7d",
       });
     });
 
@@ -370,15 +384,10 @@ export const getHistoricalPriceData = async (coinId, days = 7) => {
 
   try {
     const response = await fetchWithRetry(async () => {
-      return await axios.get(
-        `${COINGECKO_API_URL}/coins/${coinId}/market_chart`,
-        {
-          params: {
-            vs_currency: "usd",
-            days,
-          },
-        }
-      );
+      return await fetchCoinGeckoProxy(`coins/${coinId}/market_chart`, {
+        vs_currency: "usd",
+        days,
+      });
     });
 
     // 更新缓存
