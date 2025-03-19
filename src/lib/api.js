@@ -167,29 +167,76 @@ export const searchCryptocurrencies = async (query) => {
   if (!query.trim()) return [];
 
   try {
-    // 检查是否是合约地址（以0x开头的42位十六进制字符串）
-    const isContractAddress = /^0x[a-fA-F0-9]{40}$/.test(query);
+    // 检查是否是合约地址（以0x开头的40位十六进制字符串）
+    const isContractAddress = /^0x[a-fA-F0-9]{40}$/i.test(query);
 
     // 如果是合约地址
     if (isContractAddress) {
-      const response = await fetchWithRetry(async () => {
-        return await fetchCoinGeckoProxy("coins/markets", {
-          vs_currency: "usd",
-          order: "market_cap_desc",
-          sparkline: false,
-          price_change_percentage: "24h",
+      console.log(`Searching for contract address: ${query}`);
+
+      try {
+        // 使用专门的API搜索合约地址
+        // 先尝试使用CoinGecko的资产平台API (使用ethereum作为默认平台)
+        const ethResponse = await fetchWithRetry(async () => {
+          return await fetchCoinGeckoProxy(
+            "coins/ethereum/contract/" + query.toLowerCase()
+          );
         });
+
+        if (ethResponse.data && ethResponse.data.id) {
+          // 获取详细市场数据
+          const detailsResponse = await fetchWithRetry(async () => {
+            return await fetchCoinGeckoProxy("coins/markets", {
+              vs_currency: "usd",
+              ids: ethResponse.data.id,
+              sparkline: false,
+              price_change_percentage: "24h",
+            });
+          });
+
+          if (detailsResponse.data && detailsResponse.data.length > 0) {
+            return [detailsResponse.data[0]];
+          }
+        }
+      } catch (error) {
+        console.log(
+          "Failed to find exact contract, trying alternative methods:",
+          error
+        );
+      }
+
+      // 如果专门的合约搜索失败，尝试常规搜索
+      const response = await fetchWithRetry(async () => {
+        return await fetchCoinGeckoProxy("search", { query });
       });
 
-      // 过滤出匹配合约地址的币种
-      const contractCoins = response.data.filter(
-        (coin) => coin.contract_address?.toLowerCase() === query.toLowerCase()
+      // 提取匹配的合约地址
+      const matchingCoins = response.data.coins.filter(
+        (coin) =>
+          coin.platforms &&
+          Object.values(coin.platforms).some(
+            (addr) => addr && addr.toLowerCase() === query.toLowerCase()
+          )
       );
 
-      // 增强数据
-      return await Promise.all(
-        contractCoins.map((coin) => enrichWithBinanceData(coin))
-      );
+      if (matchingCoins.length > 0) {
+        // 获取详细信息
+        const coinIds = matchingCoins.map((coin) => coin.id).join(",");
+        const detailsResponse = await fetchWithRetry(async () => {
+          return await fetchCoinGeckoProxy("coins/markets", {
+            vs_currency: "usd",
+            ids: coinIds,
+            order: "market_cap_desc",
+            sparkline: false,
+            price_change_percentage: "24h",
+          });
+        });
+
+        return detailsResponse.data;
+      }
+
+      // 如果仍然没有找到，返回空数组
+      return [];
     }
     // 普通搜索
     else {

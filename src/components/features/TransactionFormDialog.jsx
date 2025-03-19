@@ -12,7 +12,7 @@ import { Button } from "@/components/ui";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { FiRefreshCw } from "react-icons/fi";
+import { FiRefreshCw, FiPlus, FiMinus } from "react-icons/fi";
 
 /**
  * @typedef {Object} TransactionFormDialogProps
@@ -43,6 +43,7 @@ const TransactionFormDialog = ({
     time: format(new Date(), "HH:mm"),
     reason: "",
   });
+  const [reasonExpanded, setReasonExpanded] = useState(false);
 
   const [errors, setErrors] = useState({});
 
@@ -59,6 +60,8 @@ const TransactionFormDialog = ({
         time: format(dateObj, "HH:mm"),
         reason: editTransaction.reason || "",
       });
+
+      setReasonExpanded(!!editTransaction.reason);
     } else if (isOpen) {
       // 新增交易时重置表单
       setFormData({
@@ -68,6 +71,7 @@ const TransactionFormDialog = ({
         time: format(new Date(), "HH:mm"),
         reason: "",
       });
+      setReasonExpanded(false);
     }
   }, [editTransaction, isOpen, crypto]);
 
@@ -156,6 +160,10 @@ const TransactionFormDialog = ({
 
     // 关闭弹窗
     onClose();
+  };
+
+  const toggleReasonField = () => {
+    setReasonExpanded(!reasonExpanded);
   };
 
   if (!crypto) {
@@ -300,19 +308,33 @@ const TransactionFormDialog = ({
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="reason" className="text-sm">
-                  {activeTab === "buy" ? "买入理由" : "卖出理由"}
-                </Label>
-                <Textarea
-                  id="reason"
-                  name="reason"
-                  value={formData.reason}
-                  onChange={handleChange}
-                  placeholder={reasonPlaceholder}
-                  className="resize-none text-sm"
-                  rows={3}
-                />
+              <div>
+                <button
+                  type="button"
+                  onClick={toggleReasonField}
+                  className="flex items-center text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {reasonExpanded ? (
+                    <FiMinus className="mr-1 h-4 w-4" />
+                  ) : (
+                    <FiPlus className="mr-1 h-4 w-4" />
+                  )}
+                  {activeTab === "buy" ? "买入理由" : "卖出理由"}（可选）
+                </button>
+
+                {reasonExpanded && (
+                  <div className="mt-2">
+                    <Textarea
+                      id="reason"
+                      name="reason"
+                      value={formData.reason}
+                      onChange={handleChange}
+                      placeholder={reasonPlaceholder}
+                      className="resize-none text-sm mt-2"
+                      rows={3}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { FiPlusCircle } from "react-icons/fi";
 import {
   Card,
@@ -31,6 +31,12 @@ const CoinList = ({
   onAddTransaction,
   isLoading = false,
 }) => {
+  // 根据当前价值对币种进行排序（从高到低）
+  const sortedCoins = useMemo(() => {
+    if (!coins || coins.length === 0) return [];
+    return [...coins].sort((a, b) => b.currentValue - a.currentValue);
+  }, [coins]);
+
   if (!coins || coins.length === 0) {
     return (
       <Card className="mb-6">
@@ -105,7 +111,7 @@ const CoinList = ({
                 isLoading ? "opacity-70" : ""
               }`}
             >
-              {coins.map((coin) => {
+              {sortedCoins.map((coin) => {
                 const hasTransactions =
                   coin.transactions && coin.transactions.length > 0;
                 const isProfitable = hasTransactions && coin.profitLoss > 0;

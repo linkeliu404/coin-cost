@@ -283,7 +283,7 @@ const TransactionList = ({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportJSON}>
                 <FiFileText className="mr-2 h-4 w-4" />
-                <span>导出为JSON (推荐)</span>
+                <span>导出为JSON (备份)</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
