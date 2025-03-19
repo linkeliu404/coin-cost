@@ -262,6 +262,10 @@ export const usePortfolio = () => {
         ...coin,
         // 确保交易数组存在
         transactions: Array.isArray(coin.transactions) ? coin.transactions : [],
+        // 使用logoUrl字段（如果存在）作为image
+        image: coin.logoUrl || coin.image || "",
+        // 确保ID存在，优先使用coinGeckoId
+        id: coin.coinGeckoId || coin.id || `${coin.symbol}-${Date.now()}`,
       }));
 
       // 临时保存处理后的数据，以便用户可以立即看到导入结果
@@ -269,9 +273,16 @@ export const usePortfolio = () => {
       setPortfolio(initialProcessed);
       savePortfolioToStorage(initialProcessed);
 
-      // 获取所有币种的符号，用于搜索最新价格
+      // 获取所有币种的符号和ID，用于搜索最新价格
       const coinSymbols = new Set(
         coins.map((coin) => coin.symbol.toLowerCase())
+      );
+
+      // 同时维护ID映射，优先使用CoinGecko ID（如果存在）
+      const coinIds = new Set(
+        coins
+          .filter((coin) => coin.coinGeckoId || (coin.id && coin.id.length > 5))
+          .map((coin) => coin.coinGeckoId || coin.id)
       );
 
       // 将币种按符号分组，稍后用于更新币种信息
@@ -285,16 +296,46 @@ export const usePortfolio = () => {
       });
 
       // 获取最新价格数据
-      if (coinSymbols.size > 0) {
+      if (coinSymbols.size > 0 || coinIds.size > 0) {
         try {
-          console.log("Searching for top cryptocurrencies...");
-          // 尝试搜索顶级加密货币列表获取最新价格和信息
-          const topCryptos = await getTopCryptocurrencies(100);
+          console.log("Fetching latest cryptocurrency data...");
+
+          // 同时获取价格数据的方式
+          const [topCryptos, specificCryptos] = await Promise.all([
+            // 获取顶级加密货币列表
+            getTopCryptocurrencies(100),
+            // 如果有确定的ID，直接获取这些加密货币的详细信息
+            coinIds.size > 0
+              ? getMultipleCryptocurrencyDetails(Array.from(coinIds))
+              : Promise.resolve({}),
+          ]);
 
           let updatedCoins = [...coins];
           let updated = false;
 
-          // 使用顶级加密货币数据更新币种信息
+          // 1. 首先使用特定ID获取的数据更新币种
+          if (specificCryptos && Object.keys(specificCryptos).length > 0) {
+            updatedCoins = updatedCoins.map((coin) => {
+              const coinId = coin.coinGeckoId || coin.id;
+              const cryptoData = specificCryptos[coinId];
+
+              if (cryptoData) {
+                updated = true;
+                return {
+                  ...coin,
+                  id: cryptoData.id,
+                  name: cryptoData.name,
+                  symbol: coin.symbol, // 保留原始符号以避免不匹配
+                  image: cryptoData.image || coin.image,
+                  currentPrice:
+                    cryptoData.current_price || coin.currentPrice || 0,
+                };
+              }
+              return coin;
+            });
+          }
+
+          // 2. 使用顶级加密货币数据更新币种信息
           for (const crypto of topCryptos) {
             const symbol = crypto.symbol.toLowerCase();
             if (coinsBySymbol[symbol]) {
@@ -308,8 +349,11 @@ export const usePortfolio = () => {
                     ...updatedCoins[coinIndex],
                     id: crypto.id, // 使用API返回的标准ID
                     name: crypto.name,
-                    image: crypto.image,
-                    currentPrice: crypto.current_price,
+                    image: crypto.image || updatedCoins[coinIndex].image,
+                    currentPrice:
+                      crypto.current_price ||
+                      updatedCoins[coinIndex].currentPrice ||
+                      0,
                   };
                   updated = true;
                 }
@@ -320,7 +364,7 @@ export const usePortfolio = () => {
             }
           }
 
-          // 对于未在顶级列表中找到的币种，尝试直接搜索
+          // 3. 对于未在顶级列表中找到的币种，尝试直接搜索
           if (coinSymbols.size > 0) {
             console.log(
               `Searching for remaining symbols: ${Array.from(coinSymbols).join(
@@ -348,8 +392,12 @@ export const usePortfolio = () => {
                         ...updatedCoins[coinIndex],
                         id: matchingCrypto.id,
                         name: matchingCrypto.name,
-                        image: matchingCrypto.image,
-                        currentPrice: matchingCrypto.current_price,
+                        image:
+                          matchingCrypto.image || updatedCoins[coinIndex].image,
+                        currentPrice:
+                          matchingCrypto.current_price ||
+                          updatedCoins[coinIndex].currentPrice ||
+                          0,
                       };
                       updated = true;
                     }
@@ -489,7 +537,25 @@ export const usePortfolio = () => {
    */
   const exportPortfolioData = () => {
     try {
-      return JSON.stringify(portfolio);
+      // 确保导出数据包含完整的币种信息，特别是图标URL
+      const exportData = {
+        ...portfolio,
+        coins: portfolio.coins.map((coin) => ({
+          ...coin,
+          // 确保包含必要的字段，方便导入时自动匹配和获取价格
+          id: coin.id,
+          name: coin.name,
+          symbol: coin.symbol,
+          image: coin.image,
+          currentPrice: coin.currentPrice,
+          // 添加额外数据以帮助导入过程
+          logoUrl: coin.image, // 冗余logoUrl字段，确保在导入时可以使用
+          coinGeckoId: coin.id, // 明确的CoinGecko ID字段
+          lastUpdated: new Date().toISOString(), // 添加导出时间戳
+        })),
+      };
+
+      return JSON.stringify(exportData);
     } catch (err) {
       setError("Failed to export portfolio");
       console.error(err);

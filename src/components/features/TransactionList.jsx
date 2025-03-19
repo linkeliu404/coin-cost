@@ -1,19 +1,23 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
-import { FiTrash2, FiEdit2, FiMoreVertical, FiDownload } from "react-icons/fi";
+import {
+  FiTrash2,
+  FiEdit2,
+  FiMoreVertical,
+  FiDownload,
+  FiFileText,
+} from "react-icons/fi";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   Button,
-} from "@/components/ui";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
@@ -81,6 +85,77 @@ const exportTransactionsToCSV = (transactions) => {
   link.setAttribute(
     "download",
     `交易记录_${format(new Date(), "yyyyMMdd")}.csv`
+  );
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+/**
+ * 导出交易记录为JSON文件（完整数据，包含图标URL等信息）
+ * @param {Array} transactions - 交易记录数组
+ * @param {Object} portfolio - 投资组合数据
+ */
+const exportTransactionsToJSON = (transactions, portfolio) => {
+  if (!transactions || transactions.length === 0 || !portfolio) {
+    alert("没有可导出的交易记录");
+    return;
+  }
+
+  // 创建导出数据，包含完整信息
+  const exportData = {
+    exportDate: new Date().toISOString(),
+    exportType: "transactions",
+    coins: {},
+  };
+
+  // 根据交易记录构建完整的币种数据
+  transactions.forEach((tx) => {
+    const { coinId, coinName, coinSymbol, coinImage } = tx;
+
+    if (!exportData.coins[coinId]) {
+      // 查找完整的币种数据
+      const coinData = portfolio.coins.find((c) => c.id === coinId) || {
+        id: coinId,
+        name: coinName,
+        symbol: coinSymbol,
+        image: coinImage,
+      };
+
+      exportData.coins[coinId] = {
+        id: coinId,
+        name: coinName,
+        symbol: coinSymbol,
+        image: coinImage,
+        logoUrl: coinImage, // 冗余字段，确保导入时可以使用
+        transactions: [],
+      };
+    }
+
+    exportData.coins[coinId].transactions.push({
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      price: tx.price,
+      date: tx.date,
+      reason: tx.reason || "",
+    });
+  });
+
+  // 转换为数组格式
+  exportData.coins = Object.values(exportData.coins);
+
+  // 创建下载链接
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute(
+    "download",
+    `交易记录_${format(new Date(), "yyyyMMdd")}.json`
   );
   link.style.visibility = "hidden";
   document.body.appendChild(link);
@@ -175,24 +250,44 @@ const TransactionList = ({
   };
 
   // 导出当前筛选后的交易记录
-  const handleExportTransactions = () => {
+  const handleExportCSV = () => {
     exportTransactionsToCSV(filteredTransactions);
+  };
+
+  // 导出JSON格式的完整数据
+  const handleExportJSON = () => {
+    exportTransactionsToJSON(filteredTransactions, portfolio);
   };
 
   return (
     <Card className="mb-6">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>交易记录</CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExportTransactions}
-          disabled={isLoading || filteredTransactions.length === 0}
-          className="flex items-center"
-        >
-          <FiDownload className="mr-2 h-4 w-4" />
-          导出
-        </Button>
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isLoading || filteredTransactions.length === 0}
+                className="flex items-center"
+              >
+                <FiDownload className="mr-2 h-4 w-4" />
+                导出
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportCSV}>
+                <FiFileText className="mr-2 h-4 w-4" />
+                <span>导出为CSV</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportJSON}>
+                <FiFileText className="mr-2 h-4 w-4" />
+                <span>导出为JSON (推荐)</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </CardHeader>
       <CardContent>
         {coinTabs.length > 0 && (
