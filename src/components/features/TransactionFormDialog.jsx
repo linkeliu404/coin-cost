@@ -338,45 +338,48 @@ const TransactionFormDialog = ({
                 <Label htmlFor="dateTime" className="text-sm">
                   日期 & 时间
                 </Label>
-                <Input
-                  id="dateTime"
-                  name="dateTime"
-                  type="datetime-local"
-                  value={formData.dateTime}
-                  onChange={handleDateTimeChange}
-                  className={cn(
-                    errors.dateTime && "border-destructive",
-                    "text-sm"
-                  )}
-                  required
-                />
-                {errors.dateTime && (
-                  <p className="text-xs text-destructive">{errors.dateTime}</p>
-                )}
-
-                {/* 历史价格展示 */}
-                {isLoadingPrice && (
-                  <div className="flex items-center text-sm text-muted-foreground mt-1">
-                    <FiClock className="mr-1 h-4 w-4" />
-                    加载历史价格中...
+                <div className="flex space-x-2 items-center">
+                  <div className="flex-1">
+                    <Input
+                      id="dateTime"
+                      name="dateTime"
+                      type="datetime-local"
+                      value={formData.dateTime}
+                      onChange={handleDateTimeChange}
+                      className={cn(
+                        errors.dateTime && "border-destructive",
+                        "text-sm"
+                      )}
+                      required
+                    />
+                    {errors.dateTime && (
+                      <p className="text-xs text-destructive">
+                        {errors.dateTime}
+                      </p>
+                    )}
                   </div>
-                )}
 
-                {!isLoadingPrice &&
-                  historicalPrice &&
-                  historicalPrice.price && (
-                    <div className="mt-1">
+                  {/* 历史价格显示 */}
+                  {isLoadingPrice ? (
+                    <div className="flex items-center text-sm text-muted-foreground whitespace-nowrap">
+                      <FiClock className="mr-1 h-4 w-4" />
+                      加载中...
+                    </div>
+                  ) : (
+                    historicalPrice &&
+                    historicalPrice.price && (
                       <button
                         type="button"
                         onClick={useHistoricalPrice}
-                        className="text-sm flex items-center text-primary hover:underline"
+                        className="text-sm flex items-center text-primary hover:underline whitespace-nowrap"
                       >
-                        <FiClock className="mr-1 h-4 w-4" />
-                        当时价格: ${historicalPrice.price.toLocaleString()}
-                        {historicalPrice.isEstimated && " (估计)"}
+                        <FiClock className="mr-1 h-4 w-4" />$
+                        {historicalPrice.price.toLocaleString()}
+                        {historicalPrice.isEstimated && " (估)"}
                       </button>
-                    </div>
+                    )
                   )}
+                </div>
               </div>
 
               <div>

@@ -72,6 +72,12 @@ const CoinList = ({
                   scope="col"
                   className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
                 >
+                  当前价格
+                </th>
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
+                >
                   持有数量
                 </th>
                 <th
@@ -79,12 +85,6 @@ const CoinList = ({
                   className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
                 >
                   平均买入价格
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
-                >
-                  当前价格
                 </th>
                 <th
                   scope="col"
@@ -143,6 +143,9 @@ const CoinList = ({
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                      ${coin.currentPrice.toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                       {hasTransactions
                         ? `${coin.holdings.toLocaleString()} ${coin.symbol.toUpperCase()}`
                         : "--"}
@@ -151,9 +154,6 @@ const CoinList = ({
                       {hasTransactions
                         ? `$${coin.averageBuyPrice.toLocaleString()}`
                         : "--"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      ${coin.currentPrice.toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                       {hasTransactions

@@ -65,30 +65,32 @@ const CryptoSearch = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[800px]">
+      <DialogContent className="max-w-[95vw] w-full sm:max-w-[800px] p-4 sm:p-6 overflow-y-auto max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>搜索加密货币</DialogTitle>
+          <DialogTitle className="text-base sm:text-lg">
+            搜索加密货币
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6">
           <div className="relative">
             <Input
               placeholder="搜索加密货币名称、代码或合约地址..."
               value={searchQuery}
               onChange={handleSearch}
-              className="pr-10"
+              className="pr-10 text-sm sm:text-base"
             />
             {searchQuery && (
               <button
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-500"
                 onClick={handleClearSearch}
               >
-                <FiX className="h-5 w-5" />
+                <FiX className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             )}
           </div>
           {error && (
-            <p className="mt-2 text-sm text-red-500">
+            <p className="mt-2 text-xs sm:text-sm text-red-500">
               {error === "Failed to search cryptocurrencies"
                 ? "搜索失败，请稍后重试"
                 : error}
@@ -96,17 +98,17 @@ const CryptoSearch = ({
           )}
         </div>
 
-        <div className="mb-4">
-          <h4 className="text-sm font-medium text-muted-foreground mb-2">
+        <div>
+          <h4 className="text-xs sm:text-sm font-medium text-muted-foreground mb-2">
             {searchQuery ? "搜索结果" : "热门加密货币"}
           </h4>
 
           {isLoading ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-4 sm:py-8">
               <Spinner size="lg" />
             </div>
           ) : displayResults.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-4 sm:py-8 text-muted-foreground text-sm">
               {searchQuery ? (
                 "没有找到匹配的加密货币，请尝试其他关键词"
               ) : (
@@ -123,63 +125,70 @@ const CryptoSearch = ({
               )}
             </div>
           ) : (
-            <div className="max-h-96 overflow-y-auto">
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
               <table className="min-w-full divide-y divide-border">
                 <thead className="bg-muted">
                   <tr>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
+                      className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
                     >
-                      名称
+                      加密货币
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
+                      className="px-3 sm:px-6 py-2 sm:py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
                     >
                       价格
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
+                      className="px-3 sm:px-6 py-2 sm:py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell"
                     >
-                      24h变化
+                      24小时变化
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
+                      className="px-3 sm:px-6 py-2 sm:py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
                     >
                       操作
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-card divide-y divide-border">
+                <tbody
+                  className={`bg-card divide-y divide-border ${
+                    isLoading ? "opacity-70" : ""
+                  }`}
+                >
                   {displayResults.map((crypto) => {
                     const added = isAlreadyAdded(crypto.id);
                     return (
                       <tr key={crypto.id} className="hover:bg-muted/50">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <img
                               src={crypto.image}
                               alt={crypto.name}
-                              className="h-8 w-8 rounded-full mr-3"
+                              className="h-6 w-6 sm:h-8 sm:w-8 rounded-full mr-2 sm:mr-3"
                               onError={(e) => {
                                 e.target.src = "/placeholder.png";
+                                e.target.onerror = null;
                               }}
                             />
                             <div>
-                              <div className="font-medium">{crypto.name}</div>
-                              <div className="text-sm text-muted-foreground">
+                              <div className="font-medium text-xs sm:text-sm truncate max-w-[120px] sm:max-w-none">
+                                {crypto.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
                                 {crypto.symbol.toUpperCase()}
                               </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm">
                           ${crypto.current_price.toLocaleString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium hidden sm:table-cell">
                           <span
                             className={
                               crypto.price_change_percentage_24h > 0
@@ -193,15 +202,15 @@ const CryptoSearch = ({
                             {crypto.price_change_percentage_24h.toFixed(2)}%
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
                           {added ? (
                             <Button
                               variant="outline"
                               size="sm"
                               disabled
-                              className="text-muted-foreground"
+                              className="text-muted-foreground text-xs h-7 sm:h-9"
                             >
-                              <FiCheck className="mr-1 h-4 w-4" />
+                              <FiCheck className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
                               已添加
                             </Button>
                           ) : (
@@ -209,6 +218,7 @@ const CryptoSearch = ({
                               variant="default"
                               size="sm"
                               onClick={() => handleSelect(crypto)}
+                              className="text-xs h-7 sm:h-9"
                             >
                               添加
                             </Button>

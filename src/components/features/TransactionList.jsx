@@ -6,6 +6,7 @@ import {
   FiMoreVertical,
   FiDownload,
   FiFileText,
+  FiChevronDown,
 } from "react-icons/fi";
 import {
   Card,
@@ -19,6 +20,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /**
  * @typedef {Object} TransactionListProps
@@ -249,6 +257,11 @@ const TransactionList = ({
     setActiveTab(value);
   };
 
+  // 处理币种选择器变化
+  const handleSelectChange = (value) => {
+    setActiveTab(value);
+  };
+
   // 导出当前筛选后的交易记录
   const handleExportCSV = () => {
     exportTransactionsToCSV(filteredTransactions);
@@ -291,20 +304,44 @@ const TransactionList = ({
       </CardHeader>
       <CardContent>
         {coinTabs.length > 0 && (
-          <Tabs
-            value={activeTab}
-            onValueChange={handleTabChange}
-            className="mb-4"
-          >
-            <TabsList>
-              <TabsTrigger value="all">全部</TabsTrigger>
-              {coinTabs.map((coin) => (
-                <TabsTrigger key={coin.id} value={coin.id}>
-                  {coin.symbol.toUpperCase()}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          <>
+            {/* 移动端显示下拉选择器 */}
+            <div className="md:hidden mb-4">
+              <Select value={activeTab} onValueChange={handleSelectChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择币种">
+                    {activeTab === "all"
+                      ? "全部"
+                      : coinTabs
+                          .find((coin) => coin.id === activeTab)
+                          ?.symbol.toUpperCase() || "选择币种"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  {coinTabs.map((coin) => (
+                    <SelectItem key={coin.id} value={coin.id}>
+                      {coin.symbol.toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 桌面端显示标签页 */}
+            <div className="hidden md:block mb-4">
+              <Tabs value={activeTab} onValueChange={handleTabChange}>
+                <TabsList>
+                  <TabsTrigger value="all">全部</TabsTrigger>
+                  {coinTabs.map((coin) => (
+                    <TabsTrigger key={coin.id} value={coin.id}>
+                      {coin.symbol.toUpperCase()}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          </>
         )}
 
         <div className="overflow-x-auto">
@@ -335,13 +372,13 @@ const TransactionList = ({
                   scope="col"
                   className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
                 >
-                  价格 (USD)
+                  价格
                 </th>
                 <th
                   scope="col"
                   className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
                 >
-                  总价值 (USD)
+                  总价值
                 </th>
                 <th
                   scope="col"
