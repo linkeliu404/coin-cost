@@ -123,9 +123,30 @@ const CoinList = ({
                           alt={coin.name}
                           className="h-8 w-8 rounded-full mr-3"
                           onError={(e) => {
-                            e.target.src =
-                              "https://via.placeholder.com/32?text=" +
-                              coin.symbol.charAt(0).toUpperCase();
+                            // 使用内联SVG替代外部图片服务
+                            const symbol = coin.symbol.charAt(0).toUpperCase();
+                            const colors = [
+                              "#FF6B6B",
+                              "#4ECDC4",
+                              "#1A535C",
+                              "#FFE66D",
+                              "#6B48FF",
+                            ];
+                            const colorIndex =
+                              symbol.charCodeAt(0) % colors.length;
+                            const bgColor = colors[colorIndex];
+
+                            // 创建SVG数据URL
+                            const svgContent = `
+                              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                                <circle cx="16" cy="16" r="16" fill="${bgColor}" />
+                                <text x="16" y="22" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white" text-anchor="middle">${symbol}</text>
+                              </svg>
+                            `;
+                            const svgBlob = new Blob([svgContent], {
+                              type: "image/svg+xml",
+                            });
+                            e.target.src = URL.createObjectURL(svgBlob);
                             e.target.onerror = null; // 防止循环触发
                           }}
                         />
