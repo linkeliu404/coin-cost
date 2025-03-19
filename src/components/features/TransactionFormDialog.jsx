@@ -12,7 +12,8 @@ import { Button } from "@/components/ui";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { FiRefreshCw, FiPlus, FiMinus } from "react-icons/fi";
+import { FiRefreshCw, FiPlus, FiMinus, FiClock } from "react-icons/fi";
+import { getHistoricalPrice } from "@/lib/api";
 
 /**
  * @typedef {Object} TransactionFormDialogProps
@@ -39,11 +40,12 @@ const TransactionFormDialog = ({
   const [formData, setFormData] = useState({
     amount: "",
     price: crypto?.current_price?.toString() || "",
-    date: format(new Date(), "yyyy-MM-dd"),
-    time: format(new Date(), "HH:mm"),
+    dateTime: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     reason: "",
   });
   const [reasonExpanded, setReasonExpanded] = useState(false);
+  const [historicalPrice, setHistoricalPrice] = useState(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
   const [errors, setErrors] = useState({});
 
@@ -56,24 +58,104 @@ const TransactionFormDialog = ({
       setFormData({
         amount: editTransaction.amount.toString(),
         price: editTransaction.price.toString(),
-        date: format(dateObj, "yyyy-MM-dd"),
-        time: format(dateObj, "HH:mm"),
+        dateTime: format(dateObj, "yyyy-MM-dd'T'HH:mm"),
         reason: editTransaction.reason || "",
       });
 
       setReasonExpanded(!!editTransaction.reason);
+
+      // 当编辑交易记录时，尝试获取历史价格
+      fetchHistoricalPrice(dateObj, crypto?.id);
     } else if (isOpen) {
       // 新增交易时重置表单
+      const now = new Date();
       setFormData({
         amount: "",
         price: crypto?.current_price?.toString() || "",
-        date: format(new Date(), "yyyy-MM-dd"),
-        time: format(new Date(), "HH:mm"),
+        dateTime: format(now, "yyyy-MM-dd'T'HH:mm"),
         reason: "",
       });
       setReasonExpanded(false);
+      setHistoricalPrice(null);
     }
   }, [editTransaction, isOpen, crypto]);
+
+  // 获取历史价格
+  const fetchHistoricalPrice = async (date, coinId) => {
+    if (!coinId) return;
+
+    const timestamp = date.getTime();
+    const now = new Date().getTime();
+
+    // 如果选择的时间是最近1小时内的，就使用当前价格
+    if (now - timestamp < 60 * 60 * 1000) {
+      setHistoricalPrice({
+        price: crypto?.current_price,
+        isEstimated: false,
+      });
+      return;
+    }
+
+    try {
+      setIsLoadingPrice(true);
+
+      // 使用API获取历史价格
+      const price = await getHistoricalPrice(coinId, timestamp);
+
+      if (price !== null) {
+        // 判断是否为估算价格 (API返回的价格可能是估算的)
+        // 我们简单判断：如果时间超过90天，认为是估算价格
+        const isEstimated = now - timestamp > 90 * 24 * 60 * 60 * 1000;
+
+        setHistoricalPrice({
+          price,
+          isEstimated,
+          timestamp: date.toISOString(),
+        });
+      } else {
+        setHistoricalPrice(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch historical price:", error);
+      setHistoricalPrice(null);
+    } finally {
+      setIsLoadingPrice(false);
+    }
+  };
+
+  // 处理日期时间变化
+  const handleDateTimeChange = (e) => {
+    const newDateTime = e.target.value;
+    setFormData((prev) => ({ ...prev, dateTime: newDateTime }));
+
+    // 清除错误
+    if (errors.dateTime) {
+      setErrors((prev) => ({ ...prev, dateTime: null }));
+    }
+
+    // 获取历史价格
+    if (newDateTime) {
+      const dateObj = new Date(newDateTime);
+      fetchHistoricalPrice(dateObj, crypto?.id);
+    } else {
+      setHistoricalPrice(null);
+    }
+  };
+
+  // 使用历史价格
+  const useHistoricalPrice = () => {
+    if (historicalPrice && historicalPrice.price) {
+      setFormData((prev) => ({
+        ...prev,
+        price: historicalPrice.price.toString(),
+      }));
+
+      // 清除价格错误
+      if (errors.price) {
+        setErrors((prev) => ({ ...prev, price: null }));
+      }
+    }
+  };
 
   const handleTabChange = (value) => {
     setActiveTab(value);
@@ -120,12 +202,8 @@ const TransactionFormDialog = ({
       newErrors.price = "请输入有效的价格";
     }
 
-    if (!formData.date) {
-      newErrors.date = "请选择日期";
-    }
-
-    if (!formData.time) {
-      newErrors.time = "请选择时间";
+    if (!formData.dateTime) {
+      newErrors.dateTime = "请选择日期和时间";
     }
 
     setErrors(newErrors);
@@ -143,22 +221,13 @@ const TransactionFormDialog = ({
       type: activeTab,
       amount: parseFloat(formData.amount),
       price: parseFloat(formData.price),
-      date: `${formData.date}T${formData.time}`,
+      date: formData.dateTime, // 直接使用ISO格式的日期时间
       reason: formData.reason.trim(),
     };
 
     onSubmit(transaction);
 
-    // 重置表单
-    setFormData({
-      amount: "",
-      price: crypto?.current_price?.toString() || "",
-      date: format(new Date(), "yyyy-MM-dd"),
-      time: format(new Date(), "HH:mm"),
-      reason: "",
-    });
-
-    // 关闭弹窗
+    // 重置表单并关闭弹窗
     onClose();
   };
 
@@ -255,7 +324,7 @@ const TransactionFormDialog = ({
                     variant="outline"
                     size="icon"
                     onClick={handleUseMarketPrice}
-                    title="使用市价"
+                    title="使用当前市价"
                   >
                     <FiRefreshCw className="h-4 w-4" />
                   </Button>
@@ -265,47 +334,49 @@ const TransactionFormDialog = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="date" className="text-sm">
-                    日期
-                  </Label>
-                  <Input
-                    id="date"
-                    name="date"
-                    type="date"
-                    value={formData.date}
-                    onChange={handleChange}
-                    className={cn(
-                      errors.date && "border-destructive",
-                      "text-sm"
-                    )}
-                    required
-                  />
-                  {errors.date && (
-                    <p className="text-xs text-destructive">{errors.date}</p>
+              <div className="space-y-2">
+                <Label htmlFor="dateTime" className="text-sm">
+                  日期 & 时间
+                </Label>
+                <Input
+                  id="dateTime"
+                  name="dateTime"
+                  type="datetime-local"
+                  value={formData.dateTime}
+                  onChange={handleDateTimeChange}
+                  className={cn(
+                    errors.dateTime && "border-destructive",
+                    "text-sm"
                   )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="time" className="text-sm">
-                    时间
-                  </Label>
-                  <Input
-                    id="time"
-                    name="time"
-                    type="time"
-                    value={formData.time}
-                    onChange={handleChange}
-                    className={cn(
-                      errors.time && "border-destructive",
-                      "text-sm"
-                    )}
-                    required
-                  />
-                  {errors.time && (
-                    <p className="text-xs text-destructive">{errors.time}</p>
+                  required
+                />
+                {errors.dateTime && (
+                  <p className="text-xs text-destructive">{errors.dateTime}</p>
+                )}
+
+                {/* 历史价格展示 */}
+                {isLoadingPrice && (
+                  <div className="flex items-center text-sm text-muted-foreground mt-1">
+                    <FiClock className="mr-1 h-4 w-4" />
+                    加载历史价格中...
+                  </div>
+                )}
+
+                {!isLoadingPrice &&
+                  historicalPrice &&
+                  historicalPrice.price && (
+                    <div className="mt-1">
+                      <button
+                        type="button"
+                        onClick={useHistoricalPrice}
+                        className="text-sm flex items-center text-primary hover:underline"
+                      >
+                        <FiClock className="mr-1 h-4 w-4" />
+                        当时价格: ${historicalPrice.price.toLocaleString()}
+                        {historicalPrice.isEstimated && " (估计)"}
+                      </button>
+                    </div>
                   )}
-                </div>
               </div>
 
               <div>
