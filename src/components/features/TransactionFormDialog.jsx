@@ -112,6 +112,12 @@ const TransactionFormDialog = ({
           isEstimated,
           timestamp: date.toISOString(),
         });
+
+        // 自动填入获取到的价格
+        setFormData((prev) => ({
+          ...prev,
+          price: price.toString(),
+        }));
       } else {
         setHistoricalPrice(null);
       }
@@ -135,8 +141,14 @@ const TransactionFormDialog = ({
 
     // 获取历史价格
     if (newDateTime) {
-      const dateObj = new Date(newDateTime);
-      fetchHistoricalPrice(dateObj, crypto?.id);
+      try {
+        const dateObj = new Date(newDateTime);
+        if (!isNaN(dateObj.getTime())) {
+          fetchHistoricalPrice(dateObj, crypto?.id);
+        }
+      } catch (error) {
+        console.error("Invalid date format:", error);
+      }
     } else {
       setHistoricalPrice(null);
     }

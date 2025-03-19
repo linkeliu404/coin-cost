@@ -49,14 +49,13 @@ ChartJS.register(
  * @returns {JSX.Element}
  */
 const PortfolioCharts = ({ portfolio }) => {
-  const [timeRange, setTimeRange] = useState("24h");
-
   const {
     portfolioChartData,
-    weeklyProfitChartData,
+    timeRangeChartData,
     isLoading,
     error,
-    retryFetchHistoricalData,
+    fetchHistoricalData,
+    currentTimeRange,
   } = useChartData(portfolio);
 
   // 计算每个币种的百分比
@@ -77,8 +76,8 @@ const PortfolioCharts = ({ portfolio }) => {
         value: coin.currentValue,
         percentage: (coin.currentValue / portfolio.totalValue) * 100,
         color:
-          portfolioChartData.datasets[0]?.backgroundColor?.[
-            portfolioChartData.labels.findIndex(
+          portfolioChartData?.datasets?.[0]?.backgroundColor?.[
+            portfolioChartData?.labels?.findIndex(
               (label) => label === coin.symbol.toUpperCase()
             )
           ] || "rgba(209, 213, 219, 0.7)",
@@ -103,7 +102,7 @@ const PortfolioCharts = ({ portfolio }) => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>收益走势</CardTitle>
-            <Tabs value="24h" className="w-auto">
+            <Tabs value={currentTimeRange} className="w-auto">
               <TabsList className="h-8">
                 <TabsTrigger value="24h" className="text-xs px-2 h-7">
                   24h
@@ -149,7 +148,7 @@ const PortfolioCharts = ({ portfolio }) => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>收益走势</CardTitle>
-            <Tabs value="24h" className="w-auto">
+            <Tabs value={currentTimeRange} className="w-auto">
               <TabsList className="h-8">
                 <TabsTrigger value="24h" className="text-xs px-2 h-7">
                   24h
@@ -191,7 +190,7 @@ const PortfolioCharts = ({ portfolio }) => {
               <div className="text-destructive mb-4">{error}</div>
               <Button
                 variant="outline"
-                onClick={retryFetchHistoricalData}
+                onClick={() => fetchHistoricalData(currentTimeRange)}
                 disabled={isLoading}
               >
                 重试
@@ -202,7 +201,7 @@ const PortfolioCharts = ({ portfolio }) => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>收益走势</CardTitle>
-            <Tabs value="24h" className="w-auto">
+            <Tabs value={currentTimeRange} className="w-auto">
               <TabsList className="h-8">
                 <TabsTrigger value="24h" className="text-xs px-2 h-7">
                   24h
@@ -227,7 +226,7 @@ const PortfolioCharts = ({ portfolio }) => {
               <div className="text-destructive mb-4">{error}</div>
               <Button
                 variant="outline"
-                onClick={retryFetchHistoricalData}
+                onClick={() => fetchHistoricalData(currentTimeRange)}
                 disabled={isLoading}
               >
                 重试
@@ -290,8 +289,7 @@ const PortfolioCharts = ({ portfolio }) => {
   };
 
   const handleTimeRangeChange = (value) => {
-    setTimeRange(value);
-    // 这里可以添加逻辑来获取不同时间范围的数据
+    fetchHistoricalData(value);
   };
 
   return (
@@ -344,7 +342,7 @@ const PortfolioCharts = ({ portfolio }) => {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>收益走势</CardTitle>
           <Tabs
-            value={timeRange}
+            value={currentTimeRange}
             onValueChange={handleTimeRangeChange}
             className="w-auto"
           >
@@ -369,8 +367,8 @@ const PortfolioCharts = ({ portfolio }) => {
         </CardHeader>
         <CardContent>
           <div className="h-80">
-            {weeklyProfitChartData?.datasets?.[0]?.data?.length > 0 ? (
-              <Line data={weeklyProfitChartData} options={lineOptions} />
+            {timeRangeChartData?.datasets?.[0]?.data?.length > 0 ? (
+              <Line data={timeRangeChartData} options={lineOptions} />
             ) : (
               <div className="flex justify-center items-center h-full text-muted-foreground">
                 暂无数据可显示
