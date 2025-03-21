@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Pie, Line } from "react-chartjs-2";
+import { Pie } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   ArcElement,
@@ -19,11 +19,9 @@ import {
   CardTitle,
   Spinner,
   Button,
-  Tabs,
-  TabsList,
-  TabsTrigger,
 } from "@/components/ui";
 import { useChartData } from "@/hooks/useChartData";
+import PortfolioAreaChart from "./PortfolioAreaChart";
 
 // 注册Chart.js组件
 ChartJS.register(
@@ -51,7 +49,6 @@ ChartJS.register(
 const PortfolioCharts = ({ portfolio }) => {
   const {
     portfolioChartData,
-    timeRangeChartData,
     isLoading,
     error,
     fetchHistoricalData,
@@ -100,27 +97,8 @@ const PortfolioCharts = ({ portfolio }) => {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>收益走势</CardTitle>
-            <Tabs value={currentTimeRange} className="w-auto">
-              <TabsList className="h-8">
-                <TabsTrigger value="24h" className="text-xs px-2 h-7">
-                  24h
-                </TabsTrigger>
-                <TabsTrigger value="7d" className="text-xs px-2 h-7">
-                  7d
-                </TabsTrigger>
-                <TabsTrigger value="1m" className="text-xs px-2 h-7">
-                  1m
-                </TabsTrigger>
-                <TabsTrigger value="3m" className="text-xs px-2 h-7">
-                  3m
-                </TabsTrigger>
-                <TabsTrigger value="1y" className="text-xs px-2 h-7">
-                  1y
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+          <CardHeader>
+            <CardTitle>资产走势</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-center py-8 text-muted-foreground">
@@ -146,27 +124,8 @@ const PortfolioCharts = ({ portfolio }) => {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>收益走势</CardTitle>
-            <Tabs value={currentTimeRange} className="w-auto">
-              <TabsList className="h-8">
-                <TabsTrigger value="24h" className="text-xs px-2 h-7">
-                  24h
-                </TabsTrigger>
-                <TabsTrigger value="7d" className="text-xs px-2 h-7">
-                  7d
-                </TabsTrigger>
-                <TabsTrigger value="1m" className="text-xs px-2 h-7">
-                  1m
-                </TabsTrigger>
-                <TabsTrigger value="3m" className="text-xs px-2 h-7">
-                  3m
-                </TabsTrigger>
-                <TabsTrigger value="1y" className="text-xs px-2 h-7">
-                  1y
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+          <CardHeader>
+            <CardTitle>资产走势</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex justify-center items-center py-16">
@@ -199,27 +158,8 @@ const PortfolioCharts = ({ portfolio }) => {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>收益走势</CardTitle>
-            <Tabs value={currentTimeRange} className="w-auto">
-              <TabsList className="h-8">
-                <TabsTrigger value="24h" className="text-xs px-2 h-7">
-                  24h
-                </TabsTrigger>
-                <TabsTrigger value="7d" className="text-xs px-2 h-7">
-                  7d
-                </TabsTrigger>
-                <TabsTrigger value="1m" className="text-xs px-2 h-7">
-                  1m
-                </TabsTrigger>
-                <TabsTrigger value="3m" className="text-xs px-2 h-7">
-                  3m
-                </TabsTrigger>
-                <TabsTrigger value="1y" className="text-xs px-2 h-7">
-                  1y
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+          <CardHeader>
+            <CardTitle>资产走势</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-center py-8">
@@ -257,39 +197,6 @@ const PortfolioCharts = ({ portfolio }) => {
         },
       },
     },
-  };
-
-  const lineOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        callbacks: {
-          label: (context) => {
-            const value = context.raw || 0;
-            return `$${value.toLocaleString()}`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-      },
-      y: {
-        ticks: {
-          callback: (value) => `$${value.toLocaleString()}`,
-        },
-      },
-    },
-  };
-
-  const handleTimeRangeChange = (value) => {
-    fetchHistoricalData(value);
   };
 
   return (
@@ -338,45 +245,8 @@ const PortfolioCharts = ({ portfolio }) => {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>收益走势</CardTitle>
-          <Tabs
-            value={currentTimeRange}
-            onValueChange={handleTimeRangeChange}
-            className="w-auto"
-          >
-            <TabsList className="h-8">
-              <TabsTrigger value="24h" className="text-xs px-2 h-7">
-                24h
-              </TabsTrigger>
-              <TabsTrigger value="7d" className="text-xs px-2 h-7">
-                7d
-              </TabsTrigger>
-              <TabsTrigger value="1m" className="text-xs px-2 h-7">
-                1m
-              </TabsTrigger>
-              <TabsTrigger value="3m" className="text-xs px-2 h-7">
-                3m
-              </TabsTrigger>
-              <TabsTrigger value="1y" className="text-xs px-2 h-7">
-                1y
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </CardHeader>
-        <CardContent>
-          <div className="h-80">
-            {timeRangeChartData?.datasets?.[0]?.data?.length > 0 ? (
-              <Line data={timeRangeChartData} options={lineOptions} />
-            ) : (
-              <div className="flex justify-center items-center h-full text-muted-foreground">
-                暂无数据可显示
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* 使用PortfolioAreaChart组件 */}
+      <PortfolioAreaChart portfolio={portfolio} />
     </div>
   );
 };

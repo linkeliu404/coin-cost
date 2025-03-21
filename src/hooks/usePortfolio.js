@@ -154,7 +154,7 @@ export const usePortfolio = () => {
    * @param {string} transactionId - 交易记录ID
    * @returns {boolean} 是否删除成功
    */
-  const deleteTransaction = (coinId, transactionId) => {
+  const deleteTransaction = async (coinId, transactionId) => {
     try {
       setPortfolio((prevPortfolio) => {
         const coinIndex = prevPortfolio.coins.findIndex(
@@ -190,8 +190,8 @@ export const usePortfolio = () => {
         return updatedPortfolio;
       });
 
-      // 更新投资组合数据
-      refreshPortfolio();
+      // 立即更新投资组合数据
+      await refreshPortfolio();
 
       return true;
     } catch (err) {
@@ -250,185 +250,73 @@ export const usePortfolio = () => {
       const importedPortfolio =
         typeof data === "string" ? JSON.parse(data) : data;
 
-      // 验证数据格式
+      // 验证导入的数据结构
       if (!importedPortfolio || !Array.isArray(importedPortfolio.coins)) {
-        console.error("Invalid portfolio data format");
-        setIsLoading(false);
-        return false;
+        throw new Error("Invalid portfolio data format");
       }
 
-      // 预处理投资组合数据，为每个币种计算基本指标
-      const coins = importedPortfolio.coins.map((coin) => ({
-        ...coin,
-        // 确保交易数组存在
-        transactions: Array.isArray(coin.transactions) ? coin.transactions : [],
-        // 使用logoUrl字段（如果存在）作为image
-        image: coin.logoUrl || coin.image || "",
-        // 确保ID存在，优先使用coinGeckoId
-        id: coin.coinGeckoId || coin.id || `${coin.symbol}-${Date.now()}`,
-      }));
-
-      // 临时保存处理后的数据，以便用户可以立即看到导入结果
-      const initialProcessed = processPortfolioData(coins);
-      setPortfolio(initialProcessed);
-      savePortfolioToStorage(initialProcessed);
-
-      // 获取所有币种的符号和ID，用于搜索最新价格
-      const coinSymbols = new Set(
-        coins.map((coin) => coin.symbol.toLowerCase())
-      );
-
-      // 同时维护ID映射，优先使用CoinGecko ID（如果存在）
-      const coinIds = new Set(
-        coins
-          .filter((coin) => coin.coinGeckoId || (coin.id && coin.id.length > 5))
-          .map((coin) => coin.coinGeckoId || coin.id)
-      );
-
-      // 将币种按符号分组，稍后用于更新币种信息
-      const coinsBySymbol = {};
-      coins.forEach((coin) => {
-        const symbol = coin.symbol.toLowerCase();
-        if (!coinsBySymbol[symbol]) {
-          coinsBySymbol[symbol] = [];
+      // 检查每个币种的数据是否有效
+      for (const coin of importedPortfolio.coins) {
+        if (!coin.id || !Array.isArray(coin.transactions)) {
+          throw new Error(`Invalid coin data: ${coin.id || "unknown"}`);
         }
-        coinsBySymbol[symbol].push(coin);
+
+        // 检查每个交易记录是否有效
+        for (const transaction of coin.transactions) {
+          if (
+            !transaction.id ||
+            !transaction.date ||
+            transaction.amount == null ||
+            transaction.price == null ||
+            !transaction.type
+          ) {
+            throw new Error(
+              `Invalid transaction data in coin: ${coin.id || "unknown"}`
+            );
+          }
+        }
+      }
+
+      // 获取所有币种的ID
+      const coinIds = importedPortfolio.coins.map((coin) => coin.id);
+
+      // 获取最新的加密货币数据
+      const cryptoDataMap = await getMultipleCryptocurrencyDetails(coinIds);
+
+      // 更新每个币种的实时价格和相关数据
+      const updatedCoins = importedPortfolio.coins.map((coin) => {
+        const cryptoData = cryptoDataMap[coin.id];
+        if (!cryptoData) return coin;
+
+        return {
+          ...coin,
+          name: cryptoData.name || coin.name,
+          symbol: cryptoData.symbol || coin.symbol,
+          image: cryptoData.image || coin.image,
+          currentPrice: cryptoData.current_price,
+        };
       });
 
-      // 获取最新价格数据
-      if (coinSymbols.size > 0 || coinIds.size > 0) {
-        try {
-          console.log("Fetching latest cryptocurrency data...");
+      // 处理投资组合的统计数据
+      const processedPortfolio = processPortfolioData({
+        ...importedPortfolio,
+        coins: updatedCoins,
+      });
 
-          // 同时获取价格数据的方式
-          const [topCryptos, specificCryptos] = await Promise.all([
-            // 获取顶级加密货币列表
-            getTopCryptocurrencies(100),
-            // 如果有确定的ID，直接获取这些加密货币的详细信息
-            coinIds.size > 0
-              ? getMultipleCryptocurrencyDetails(Array.from(coinIds))
-              : Promise.resolve({}),
-          ]);
+      // 保存到本地存储
+      savePortfolioToStorage(processedPortfolio);
+      setPortfolio(processedPortfolio);
 
-          let updatedCoins = [...coins];
-          let updated = false;
+      // 立即刷新以获取最新价格
+      await refreshPortfolio();
 
-          // 1. 首先使用特定ID获取的数据更新币种
-          if (specificCryptos && Object.keys(specificCryptos).length > 0) {
-            updatedCoins = updatedCoins.map((coin) => {
-              const coinId = coin.coinGeckoId || coin.id;
-              const cryptoData = specificCryptos[coinId];
-
-              if (cryptoData) {
-                updated = true;
-                return {
-                  ...coin,
-                  id: cryptoData.id,
-                  name: cryptoData.name,
-                  symbol: coin.symbol, // 保留原始符号以避免不匹配
-                  image: cryptoData.image || coin.image,
-                  currentPrice:
-                    cryptoData.current_price || coin.currentPrice || 0,
-                };
-              }
-              return coin;
-            });
-          }
-
-          // 2. 使用顶级加密货币数据更新币种信息
-          for (const crypto of topCryptos) {
-            const symbol = crypto.symbol.toLowerCase();
-            if (coinsBySymbol[symbol]) {
-              // 为所有同一符号的币种更新信息
-              coinsBySymbol[symbol].forEach((coin) => {
-                const coinIndex = updatedCoins.findIndex(
-                  (c) => c.id === coin.id
-                );
-                if (coinIndex !== -1) {
-                  updatedCoins[coinIndex] = {
-                    ...updatedCoins[coinIndex],
-                    id: crypto.id, // 使用API返回的标准ID
-                    name: crypto.name,
-                    image: crypto.image || updatedCoins[coinIndex].image,
-                    currentPrice:
-                      crypto.current_price ||
-                      updatedCoins[coinIndex].currentPrice ||
-                      0,
-                  };
-                  updated = true;
-                }
-              });
-
-              // 从待处理列表中删除已处理的符号
-              coinSymbols.delete(symbol);
-            }
-          }
-
-          // 3. 对于未在顶级列表中找到的币种，尝试直接搜索
-          if (coinSymbols.size > 0) {
-            console.log(
-              `Searching for remaining symbols: ${Array.from(coinSymbols).join(
-                ", "
-              )}`
-            );
-            for (const symbol of coinSymbols) {
-              try {
-                const searchResults = await searchCryptocurrencies(symbol);
-
-                if (searchResults && searchResults.length > 0) {
-                  // 找到最匹配的结果（通常是第一个）
-                  const matchingCrypto =
-                    searchResults.find(
-                      (c) => c.symbol.toLowerCase() === symbol
-                    ) || searchResults[0];
-
-                  // 更新所有同一符号的币种
-                  coinsBySymbol[symbol].forEach((coin) => {
-                    const coinIndex = updatedCoins.findIndex(
-                      (c) => c.id === coin.id
-                    );
-                    if (coinIndex !== -1) {
-                      updatedCoins[coinIndex] = {
-                        ...updatedCoins[coinIndex],
-                        id: matchingCrypto.id,
-                        name: matchingCrypto.name,
-                        image:
-                          matchingCrypto.image || updatedCoins[coinIndex].image,
-                        currentPrice:
-                          matchingCrypto.current_price ||
-                          updatedCoins[coinIndex].currentPrice ||
-                          0,
-                      };
-                      updated = true;
-                    }
-                  });
-                }
-              } catch (error) {
-                console.error(`Failed to search for ${symbol}:`, error);
-              }
-            }
-          }
-
-          // 如果有更新，重新处理投资组合数据
-          if (updated) {
-            console.log("Updating portfolio with latest cryptocurrency data");
-            const finalProcessed = processPortfolioData(updatedCoins);
-            setPortfolio(finalProcessed);
-            savePortfolioToStorage(finalProcessed);
-          }
-        } catch (error) {
-          console.error("Failed to fetch updated prices:", error);
-          // 即使无法获取最新价格，仍然继续使用初始处理后的数据
-        }
-      }
-
-      setIsLoading(false);
       return true;
     } catch (err) {
-      setError("Failed to import portfolio");
+      setError(`Failed to import portfolio: ${err.message}`);
       console.error(err);
-      setIsLoading(false);
       return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -1,6 +1,8 @@
 import React from "react";
 import { FiPlus, FiRefreshCw } from "react-icons/fi";
 import { Button } from "@/components/ui";
+import Image from "next/image";
+import CryptoCostLogo from "@/app/crypto-cost-logo.svg";
 
 /**
  * @typedef {Object} HeaderProps
@@ -18,7 +20,13 @@ const Header = ({ onAddCrypto, onRefresh, isRefreshing }) => {
   return (
     <header className="bg-primary text-primary-foreground p-4 shadow-md">
       <div className="container mx-auto flex justify-between items-center">
-        <h1 className="text-xl font-bold">CryptoCost</h1>
+        <Image
+          src={CryptoCostLogo}
+          alt="CryptoCost Logo"
+          width={155}
+          height={25}
+          priority
+        />
         <div className="flex space-x-2">
           <Button
             onClick={onRefresh}

@@ -317,7 +317,7 @@ const TransactionFormDialog = ({
 
               <div className="space-y-2">
                 <Label htmlFor="price" className="text-sm">
-                  价格 (USD)
+                  当时价格 (USD)
                 </Label>
                 <div className="flex space-x-2">
                   <Input
@@ -346,80 +346,60 @@ const TransactionFormDialog = ({
                   </Button>
                 </div>
                 {errors.price && (
-                  <p className="text-xs text-destructive">{errors.price}</p>
+                  <p className="text-xs text-red-500 mt-1">{errors.price}</p>
                 )}
               </div>
 
-              {showHistoricalPrice ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="dateTime" className="text-sm">
-                      日期 & 时间
-                    </Label>
-                    <Input
-                      id="dateTime"
-                      name="dateTime"
-                      type="datetime-local"
-                      value={formData.dateTime}
-                      onChange={handleDateTimeChange}
-                      className={cn(
-                        errors.dateTime && "border-destructive",
-                        "text-sm"
-                      )}
-                      required
-                    />
-                    {errors.dateTime && (
-                      <p className="text-xs text-destructive">
-                        {errors.dateTime}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm">当时价格</Label>
-
-                    {isLoadingPrice ? (
-                      <div className="flex items-center h-10 text-sm text-muted-foreground">
-                        <FiClock className="mr-1 h-4 w-4" />
-                        加载中...
-                      </div>
-                    ) : historicalPrice && historicalPrice.price ? (
-                      <button
-                        type="button"
-                        onClick={useHistoricalPrice}
-                        className="h-10 px-3 rounded border border-input bg-transparent text-sm flex items-center text-primary hover:bg-accent hover:text-accent-foreground transition-colors"
-                      >
-                        <FiClock className="mr-2 h-4 w-4" />$
-                        {historicalPrice.price.toLocaleString()}
-                        {historicalPrice.isEstimated && " (估)"}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="dateTime" className="text-sm">
-                    日期 & 时间
-                  </Label>
+              <div className="mb-4">
+                <Label htmlFor="dateTime">日期&时间</Label>
+                <div className="relative">
                   <Input
+                    type="datetime-local"
                     id="dateTime"
                     name="dateTime"
-                    type="datetime-local"
                     value={formData.dateTime}
                     onChange={handleDateTimeChange}
                     className={cn(
-                      errors.dateTime && "border-destructive",
-                      "text-sm"
+                      "pr-10",
+                      errors.dateTime ? "border-red-500" : ""
                     )}
-                    required
                   />
-                  {errors.dateTime && (
-                    <p className="text-xs text-destructive">
-                      {errors.dateTime}
-                    </p>
-                  )}
                 </div>
-              )}
+                {errors.dateTime && (
+                  <p className="text-xs text-red-500 mt-1">{errors.dateTime}</p>
+                )}
+
+                {historicalPrice && (
+                  <div className="mt-2 text-xs flex flex-col">
+                    <span
+                      className={cn(
+                        "flex items-center",
+                        historicalPrice.isEstimated
+                          ? "text-yellow-500"
+                          : "text-primary"
+                      )}
+                    >
+                      {historicalPrice.isEstimated && "估算"}价格:{" "}
+                      {historicalPrice.price
+                        ? `$${historicalPrice.price.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits:
+                              crypto?.current_price > 1 ? 2 : 8,
+                          })}`
+                        : "未知"}
+                    </span>
+                  </div>
+                )}
+
+                {isLoadingPrice && (
+                  <div className="mt-2 text-xs text-muted-foreground flex items-center">
+                    <span className="animate-spin mr-1">
+                      <FiRefreshCw size={12} />
+                    </span>
+                    获取历史价格中...
+                  </div>
+                )}
+              </div>
 
               <div>
                 <button
