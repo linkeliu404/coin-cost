@@ -954,180 +954,48 @@ export const getMultipleCryptocurrencyDetails = async (coinIds) => {
  * @returns {Promise<Object>} - 历史价格数据，格式为 {coinId: {prices: [[timestamp, price], ...], market_caps: [...], total_volumes: [...]}}
  */
 export const getHistoricalPriceData = async (coinIds, days = 7) => {
-  // 确保coinIds统一处理为数组
-  const coinIdsArray = Array.isArray(coinIds) ? coinIds : [coinIds];
+  if (!coinIds || coinIds.length === 0) return {};
 
-  // 生成请求缓存键
-  const batchCacheKey = `historical_batch_${coinIdsArray.join(",")}_${days}`;
-
-  // 首先尝试从localStorage获取数据（浏览器刷新后依然有效）
-  try {
-    const localStorageKey = `hist_data_${coinIdsArray.join("_")}_${days}`;
-    const localData = localStorage.getItem(localStorageKey);
-
-    if (localData) {
-      const { data, timestamp } = JSON.parse(localData);
-      // 本地存储缓存有效期设为2小时
-      if (Date.now() - timestamp < 2 * 60 * 60 * 1000) {
-        console.log("Using localStorage cache for historical data");
-        return data;
-      }
-    }
-  } catch (e) {
-    console.warn("localStorage读取失败", e);
-  }
-
-  // 检查是否有完整的内存批量缓存
-  if (
-    cache.historicalPrices[batchCacheKey] &&
-    Date.now() - cache.historicalPrices[batchCacheKey].timestamp < CACHE_EXPIRY
-  ) {
-    return cache.historicalPrices[batchCacheKey].data;
-  }
-
-  // 分组处理：已缓存和需要获取的ID
+  // 创建一个对象来存储结果
   const result = {};
-  const missingIds = [];
 
-  // 检查每个ID是否已有有效缓存
-  for (const id of coinIdsArray) {
-    const singleCacheKey = `historical_${id}_${days}`;
-
-    if (
-      cache.historicalPrices[singleCacheKey] &&
-      Date.now() - cache.historicalPrices[singleCacheKey].timestamp <
-        CACHE_EXPIRY
-    ) {
-      // 使用缓存数据
-      result[id] = cache.historicalPrices[singleCacheKey].data[id];
-    } else {
-      // 需要获取的ID
-      missingIds.push(id);
-    }
-  }
-
-  // 如果所有ID都有缓存，返回合并的结果
-  if (missingIds.length === 0) {
-    // 更新批量缓存
-    cache.historicalPrices[batchCacheKey] = {
-      data: result,
-      timestamp: Date.now(),
-    };
-
-    // 保存到localStorage以便刷新后使用
-    try {
-      const localStorageKey = `hist_data_${coinIdsArray.join("_")}_${days}`;
-      localStorage.setItem(
-        localStorageKey,
-        JSON.stringify({
-          data: result,
-          timestamp: Date.now(),
-        })
-      );
-    } catch (e) {
-      console.warn("localStorage保存失败", e);
-    }
-
-    return result;
-  }
-
-  try {
-    // 为所有缺失的ID发起单个批量请求
-    const missingData = await fetchWithRetry(
-      async () => {
-        // CoinGecko API支持批量获取多个币种的历史数据
-        const urlParams = `market_chart?vs_currency=usd&days=${days}&ids=${missingIds.join(
-          ","
-        )}`;
-        const response = await fetchCoinGeckoProxy(
-          `coins/markets/${urlParams}`
+  // 对每个币种并行请求数据
+  await Promise.all(
+    coinIds.map(async (id) => {
+      try {
+        // 尝试使用我们的API代理
+        const response = await fetch(
+          `/api/coingecko?endpoint=coins/${id}/market_chart&vs_currency=usd&days=${days}`
         );
 
-        // 如果返回的不是每个币种分组的数据，需要处理转换
-        const formattedData = {};
-
-        // 检查响应格式：如果是数组，需要转换为币种ID索引的对象
-        if (Array.isArray(response)) {
-          response.forEach((item) => {
-            if (item.id) {
-              formattedData[item.id] = {
-                prices: item.prices || [],
-                market_caps: item.market_caps || [],
-                total_volumes: item.total_volumes || [],
-              };
-            }
-          });
-        }
-        // 如果是单个币种数据，将其映射到所有请求的币种
-        else if (response && (response.prices || response.market_caps)) {
-          missingIds.forEach((id) => {
-            formattedData[id] = response;
-          });
-        }
-        // 如果响应已经是按币种ID索引的对象
-        else if (typeof response === "object") {
-          Object.assign(formattedData, response);
+        if (!response.ok) {
+          throw new Error(`API错误: ${response.status}`);
         }
 
-        return formattedData;
-      },
-      3,
-      1000,
-      batchCacheKey
-    );
+        const data = await response.json();
+        result[id] = data;
+      } catch (error) {
+        console.error(`获取${id}历史数据失败:`, error);
 
-    // 更新每个币种的独立缓存
-    for (const id of missingIds) {
-      if (missingData[id]) {
-        const singleCacheKey = `historical_${id}_${days}`;
-        cache.historicalPrices[singleCacheKey] = {
-          data: { [id]: missingData[id] },
-          timestamp: Date.now(),
-        };
+        // 尝试直接从CoinGecko获取数据作为备用
+        try {
+          const fallbackResponse = await fetch(
+            `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}`
+          );
+
+          if (fallbackResponse.ok) {
+            const fallbackData = await fallbackResponse.json();
+            result[id] = fallbackData;
+            console.log(`成功从备用源获取${id}数据`);
+          }
+        } catch (fallbackError) {
+          console.error(`备用源也失败:`, fallbackError);
+        }
       }
-    }
+    })
+  );
 
-    // 合并结果
-    const combinedResult = { ...result, ...missingData };
-
-    // 更新批量缓存
-    cache.historicalPrices[batchCacheKey] = {
-      data: combinedResult,
-      timestamp: Date.now(),
-    };
-
-    // 保存到localStorage以便刷新后使用
-    try {
-      const localStorageKey = `hist_data_${coinIdsArray.join("_")}_${days}`;
-      localStorage.setItem(
-        localStorageKey,
-        JSON.stringify({
-          data: combinedResult,
-          timestamp: Date.now(),
-        })
-      );
-    } catch (e) {
-      console.warn("localStorage保存失败", e);
-    }
-
-    return combinedResult;
-  } catch (error) {
-    console.error("历史价格数据获取失败:", error);
-
-    // 如果有部分数据，返回这些数据
-    if (Object.keys(result).length > 0) {
-      return result;
-    }
-
-    // 如果有过期的批量缓存，尝试使用它
-    if (cache.historicalPrices[batchCacheKey]) {
-      console.log(`使用过期缓存：${batchCacheKey}`);
-      return cache.historicalPrices[batchCacheKey].data;
-    }
-
-    // 最终失败，返回空对象
-    return {};
-  }
+  return result;
 };
 
 /**

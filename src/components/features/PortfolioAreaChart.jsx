@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
   Spinner,
+  Button,
 } from "@/components/ui";
 import { getHistoricalPriceData } from "@/lib/api";
 import {
@@ -141,8 +142,22 @@ const PortfolioAreaChart = ({ portfolio }) => {
       // 获取币种的ID
       const coinIds = portfolio.coins.map((coin) => coin.id);
 
+      // 添加重试逻辑
+      const fetchWithRetry = async (retries = 3) => {
+        try {
+          return await getHistoricalPriceData(coinIds, 14); // 增加天数从7天到14天以获取更多数据点
+        } catch (err) {
+          if (retries > 0) {
+            console.log(`重试获取价格数据，剩余尝试次数: ${retries - 1}`);
+            await new Promise((r) => setTimeout(r, 1000)); // 等待1秒后重试
+            return fetchWithRetry(retries - 1);
+          }
+          throw err;
+        }
+      };
+
       // 并行处理价格数据和图表渲染
-      const historicalDataPromise = getHistoricalPriceData(coinIds, 7);
+      const historicalDataPromise = fetchWithRetry();
 
       // 先创建一个基础图表结构
       const last7Days = Array.from({ length: 7 }, (_, i) => {
@@ -345,22 +360,47 @@ const PortfolioAreaChart = ({ portfolio }) => {
         {error && (
           <div className="h-full flex flex-col items-center justify-center">
             <p className="text-destructive mb-2">{error}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setError(null);
+                dataFetchedRef.current = false;
+                fetchChartData();
+              }}
+            >
+              重试
+            </Button>
           </div>
         )}
 
         {!error && (
           <div className={`h-full relative ${isLoading ? "opacity-20" : ""}`}>
-            {chartData.labels.length > 0 && (
+            {chartData.labels.length > 0 && chartData.values.length > 0 ? (
               <Line
                 ref={chartRef}
                 data={chartConfig.data}
                 options={chartConfig.options}
               />
-            )}
-            {chartData.labels.length === 0 && !isLoading && (
-              <div className="h-full flex items-center justify-center text-muted-foreground">
-                暂无资产走势数据
-              </div>
+            ) : (
+              !isLoading && (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <p className="mb-2">暂无资产走势数据</p>
+                  <p className="text-sm mb-4">
+                    请确保您已添加加密货币并记录交易
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      dataFetchedRef.current = false;
+                      fetchChartData();
+                    }}
+                  >
+                    刷新
+                  </Button>
+                </div>
+              )
             )}
           </div>
         )}
