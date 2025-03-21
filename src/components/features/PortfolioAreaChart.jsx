@@ -125,8 +125,8 @@ const PortfolioAreaChart = ({ portfolio }) => {
       if (cachedData) {
         try {
           const { timestamp, data } = JSON.parse(cachedData);
-          // 只使用30分钟内的缓存 (增加缓存时间)
-          if (Date.now() - timestamp < 30 * 60 * 1000) {
+          // 只使用60分钟内的缓存 (增加缓存时间)
+          if (Date.now() - timestamp < 60 * 60 * 1000) {
             setChartData(data);
             GLOBAL_CHART_CACHE.data = data;
             GLOBAL_CHART_CACHE.lastUpdated = timestamp;

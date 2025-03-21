@@ -20,8 +20,11 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      onClick={toggleTheme}
-      className="h-9 w-9 rounded-full"
+      onClick={(e) => {
+        e.stopPropagation();
+        toggleTheme();
+      }}
+      className="h-9 w-9 rounded-full relative z-10"
       aria-label="切换主题"
     >
       <FiSun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />

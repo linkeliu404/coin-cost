@@ -107,7 +107,7 @@ export async function GET(request) {
   }${endpoint}:${paramsString}`;
 
   // 确定缓存时间 (秒)
-  let cacheTTL = 300; // 默认5分钟
+  let cacheTTL = 3600; // 60分钟
 
   // 不同端点使用不同的缓存时间
   if (endpoint.includes("market_chart")) {
