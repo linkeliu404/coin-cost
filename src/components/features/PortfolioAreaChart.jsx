@@ -79,6 +79,28 @@ const PortfolioAreaChart = ({ portfolio }) => {
         console.log("最早的交易日期:", earliestDate);
         setEarliestTransactionDate(earliestDate);
 
+        // 检查是否有缓存的图表数据
+        const cacheKey = portfolio.coins
+          .map((coin) => `${coin.id}-${coin.transactions.length}`)
+          .join("|");
+
+        const cachedData = sessionStorage.getItem(`chart_data_${cacheKey}`);
+
+        if (cachedData) {
+          try {
+            const { timestamp, data } = JSON.parse(cachedData);
+            // 只使用15分钟内的缓存
+            if (Date.now() - timestamp < 15 * 60 * 1000) {
+              console.log("使用缓存的图表数据");
+              setChartData(data);
+              setIsLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.error("解析缓存数据失败", e);
+          }
+        }
+
         // 获取每个币种的历史价格数据
         const coinIds = portfolio.coins.map((coin) => coin.id);
         console.log("获取这些币种的历史数据:", coinIds);
@@ -144,15 +166,28 @@ const PortfolioAreaChart = ({ portfolio }) => {
         );
         console.log("过滤后的天数:", filteredDays);
 
+        // 创建图表数据对象
+        const chartDataResult = {
+          labels: filteredDays.map((day) => day.formattedDate),
+          values: filteredDays.map((day) => day.value),
+        };
+
         // 设置图表数据
-        setChartData({
-          labels: filteredDays.map((day) => day.formattedDate),
-          values: filteredDays.map((day) => day.value),
-        });
-        console.log("最终图表数据:", {
-          labels: filteredDays.map((day) => day.formattedDate),
-          values: filteredDays.map((day) => day.value),
-        });
+        setChartData(chartDataResult);
+        console.log("最终图表数据:", chartDataResult);
+
+        // 缓存图表数据
+        try {
+          sessionStorage.setItem(
+            `chart_data_${cacheKey}`,
+            JSON.stringify({
+              timestamp: Date.now(),
+              data: chartDataResult,
+            })
+          );
+        } catch (e) {
+          console.error("缓存图表数据失败", e);
+        }
       } catch (err) {
         console.error("图表数据获取错误:", err);
         setError(err.message || "获取数据失败");
