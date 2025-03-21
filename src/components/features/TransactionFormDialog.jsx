@@ -316,8 +316,11 @@ const TransactionFormDialog = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="price" className="text-sm">
-                  当时价格 (USD)
+                <Label
+                  htmlFor="price"
+                  className="text-sm sm:text-base mb-1 block"
+                >
+                  价格
                 </Label>
                 <div className="flex space-x-2">
                   <Input
@@ -351,7 +354,12 @@ const TransactionFormDialog = ({
               </div>
 
               <div className="mb-4">
-                <Label htmlFor="dateTime">日期&时间</Label>
+                <Label
+                  htmlFor="dateTime"
+                  className="text-sm sm:text-base mb-1 block"
+                >
+                  日期 & 时间
+                </Label>
                 <div className="relative">
                   <Input
                     type="datetime-local"
@@ -379,7 +387,7 @@ const TransactionFormDialog = ({
                           : "text-primary"
                       )}
                     >
-                      {historicalPrice.isEstimated && "估算"}价格:{" "}
+                      {historicalPrice.isEstimated && "估算"}当时价格:{" "}
                       {historicalPrice.price
                         ? `$${historicalPrice.price.toLocaleString(undefined, {
                             minimumFractionDigits: 2,

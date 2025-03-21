@@ -1,6 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { format } from "date-fns";
 import { getHistoricalPriceData } from "@/lib/api";
+
+// 全局状态缓存
+const CACHE = {
+  portfolioChartData: null,
+  timeRangeChartData: null,
+  timestamp: 0,
+  // 增加缓存时间至60分钟
+  expiryTime: 60 * 60 * 1000,
+  // 按投资组合ID和时间范围存储的详细缓存
+  detailedCache: {},
+};
 
 /**
  * 图表数据处理的自定义钩子
@@ -8,35 +19,58 @@ import { getHistoricalPriceData } from "@/lib/api";
  * @returns {Object} 图表数据和状态
  */
 export const useChartData = (portfolio) => {
-  const [portfolioChartData, setPortfolioChartData] = useState({
-    labels: [],
-    datasets: [
-      {
-        label: "投资组合分布",
-        data: [],
-        backgroundColor: [],
-        borderColor: "rgba(255, 255, 255, 0.5)",
-        borderWidth: 1,
-      },
-    ],
-  });
+  // 跟踪上一次处理的投资组合ID，减少不必要的处理
+  const lastPortfolioIdRef = useRef("");
 
-  const [timeRangeChartData, setTimeRangeChartData] = useState({
-    labels: [],
-    datasets: [
-      {
-        label: "收益走势",
-        data: [],
-        borderColor: "#10b981",
-        backgroundColor: "rgba(16, 185, 129, 0.1)",
-        tension: 0.4,
-        fill: true,
-      },
-    ],
-  });
+  // 初始化时使用缓存数据或默认值
+  const initChartData = (type) => {
+    // 如果缓存未过期，使用缓存数据
+    if (CACHE.timestamp && Date.now() - CACHE.timestamp < CACHE.expiryTime) {
+      if (type === "portfolio" && CACHE.portfolioChartData) {
+        return CACHE.portfolioChartData;
+      } else if (type === "timeRange" && CACHE.timeRangeChartData) {
+        return CACHE.timeRangeChartData;
+      }
+    }
+
+    return type === "portfolio"
+      ? {
+          labels: [],
+          datasets: [
+            {
+              label: "投资组合分布",
+              data: [],
+              backgroundColor: [],
+              borderColor: "rgba(255, 255, 255, 0.5)",
+              borderWidth: 1,
+            },
+          ],
+        }
+      : {
+          labels: [],
+          datasets: [
+            {
+              label: "收益走势",
+              data: [],
+              borderColor: "#10b981",
+              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              tension: 0.4,
+              fill: true,
+            },
+          ],
+        };
+  };
+
+  const [portfolioChartData, setPortfolioChartData] = useState(() =>
+    initChartData("portfolio")
+  );
+
+  const [timeRangeChartData, setTimeRangeChartData] = useState(() =>
+    initChartData("timeRange")
+  );
 
   const [currentTimeRange, setCurrentTimeRange] = useState("7d");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(!CACHE.timestamp);
   const [error, setError] = useState(null);
 
   /**
@@ -66,6 +100,12 @@ export const useChartData = (portfolio) => {
     return colors;
   };
 
+  // 计算投资组合唯一ID，用于缓存判断
+  const getPortfolioId = useCallback(() => {
+    if (!portfolio?.coins) return "";
+    return portfolio.coins.map((c) => `${c.id}-${c.holdings}`).join("|");
+  }, [portfolio]);
+
   // 更新投资组合分布图表数据
   useEffect(() => {
     if (!portfolio || portfolio.coins.length === 0) {
@@ -84,11 +124,26 @@ export const useChartData = (portfolio) => {
       return;
     }
 
+    // 计算投资组合唯一ID
+    const portfolioId = getPortfolioId();
+
+    // 如果投资组合没有变化，不更新图表数据
+    if (
+      portfolioId === lastPortfolioIdRef.current &&
+      CACHE.portfolioChartData
+    ) {
+      return;
+    }
+
+    // 更新引用值以便下次比较
+    lastPortfolioIdRef.current = portfolioId;
+
+    // 立即显示基本图表结构，即使数据还在加载
     const labels = portfolio.coins.map((coin) => coin.symbol.toUpperCase());
     const data = portfolio.coins.map((coin) => coin.currentValue);
     const colors = generateRandomColors(portfolio.coins.length);
 
-    setPortfolioChartData({
+    const chartData = {
       labels,
       datasets: [
         {
@@ -99,8 +154,20 @@ export const useChartData = (portfolio) => {
           borderWidth: 1,
         },
       ],
-    });
-  }, [portfolio]);
+    };
+
+    setPortfolioChartData(chartData);
+
+    // 缓存数据
+    CACHE.portfolioChartData = chartData;
+    CACHE.timestamp = Date.now();
+
+    // 缓存到详细缓存
+    CACHE.detailedCache[portfolioId] = {
+      portfolioChartData: chartData,
+      timestamp: Date.now(),
+    };
+  }, [portfolio, getPortfolioId]);
 
   // 根据时间范围确定天数
   const getDaysFromTimeRange = (timeRange) => {
@@ -146,19 +213,78 @@ export const useChartData = (portfolio) => {
         setCurrentTimeRange(timeRange);
 
         const days = getDaysFromTimeRange(timeRange);
+        const portfolioId = getPortfolioId();
+
+        // 检查详细缓存中是否已有数据
+        const cacheKey = `${timeRange}_${portfolioId}`;
+        if (
+          CACHE.detailedCache[cacheKey] &&
+          Date.now() - CACHE.detailedCache[cacheKey].timestamp <
+            CACHE.expiryTime
+        ) {
+          setTimeRangeChartData(CACHE.detailedCache[cacheKey].data);
+          setIsLoading(false);
+          return;
+        }
+
+        // 检查sessionStorage中是否已有数据
+        const storageCacheKey = `time_chart_${cacheKey}`;
+        const cachedData = sessionStorage.getItem(storageCacheKey);
+
+        if (cachedData) {
+          try {
+            const { timestamp, data } = JSON.parse(cachedData);
+            // 使用更长的缓存有效期
+            if (Date.now() - timestamp < CACHE.expiryTime) {
+              setTimeRangeChartData(data);
+              CACHE.timeRangeChartData = data;
+              CACHE.timestamp = timestamp;
+
+              // 更新详细缓存
+              CACHE.detailedCache[cacheKey] = {
+                data,
+                timestamp,
+              };
+
+              setIsLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.error("解析缓存数据失败", e);
+          }
+        }
 
         // 获取所有币种的历史价格数据
         const coinIds = portfolio.coins.map((coin) => coin.id);
-        const historicalDataPromises = coinIds.map((id) =>
-          getHistoricalPriceData(id, days)
+
+        // 批量获取历史价格数据
+        const historicalDataResults = await getHistoricalPriceData(
+          coinIds,
+          days
         );
-        const historicalDataResults = await Promise.all(historicalDataPromises);
 
         // 合并所有历史数据
-        const combinedHistoricalData = {};
-        historicalDataResults.forEach((data) => {
-          Object.assign(combinedHistoricalData, data);
-        });
+        const combinedHistoricalData = historicalDataResults || {};
+
+        // 如果没有获取到历史数据，返回空图表
+        if (Object.keys(combinedHistoricalData).length === 0) {
+          const emptyChartData = {
+            labels: [],
+            datasets: [
+              {
+                label: getChartLabel(timeRange),
+                data: [],
+                borderColor: "#10b981",
+                backgroundColor: "rgba(16, 185, 129, 0.1)",
+                tension: 0.4,
+                fill: true,
+              },
+            ],
+          };
+          setTimeRangeChartData(emptyChartData);
+          setIsLoading(false);
+          return;
+        }
 
         // 计算每天的投资组合总价值
         const dailyValues = {};
@@ -218,7 +344,7 @@ export const useChartData = (portfolio) => {
           format(new Date(ts), formatString)
         );
 
-        setTimeRangeChartData({
+        const chartData = {
           labels,
           datasets: [
             {
@@ -230,7 +356,32 @@ export const useChartData = (portfolio) => {
               fill: true,
             },
           ],
-        });
+        };
+
+        setTimeRangeChartData(chartData);
+
+        // 更新全局缓存
+        CACHE.timeRangeChartData = chartData;
+        CACHE.timestamp = Date.now();
+
+        // 更新详细缓存
+        CACHE.detailedCache[cacheKey] = {
+          data: chartData,
+          timestamp: Date.now(),
+        };
+
+        // 缓存到 sessionStorage
+        try {
+          sessionStorage.setItem(
+            storageCacheKey,
+            JSON.stringify({
+              timestamp: Date.now(),
+              data: chartData,
+            })
+          );
+        } catch (e) {
+          console.error("缓存图表数据失败", e);
+        }
       } catch (err) {
         console.error("Failed to fetch historical data:", err);
         setError("加载图表数据失败，请稍后重试");
@@ -238,7 +389,7 @@ export const useChartData = (portfolio) => {
         setIsLoading(false);
       }
     },
-    [portfolio]
+    [portfolio, getPortfolioId]
   );
 
   // 根据时间范围获取图表标签
@@ -259,10 +410,24 @@ export const useChartData = (portfolio) => {
     }
   };
 
-  // 初始加载和portfolio变化时获取历史数据
+  // 在组件挂载时自动获取历史数据
   useEffect(() => {
-    fetchHistoricalData(currentTimeRange);
-  }, [fetchHistoricalData, currentTimeRange]);
+    if (portfolio && portfolio.coins.length > 0) {
+      // 获取投资组合ID和缓存键
+      const portfolioId = getPortfolioId();
+      const cacheKey = `${currentTimeRange}_${portfolioId}`;
+
+      // 检查是否需要获取历史数据
+      const needFetch =
+        !CACHE.detailedCache[cacheKey] ||
+        Date.now() - CACHE.detailedCache[cacheKey].timestamp >=
+          CACHE.expiryTime;
+
+      if (needFetch) {
+        fetchHistoricalData(currentTimeRange);
+      }
+    }
+  }, [portfolio, currentTimeRange, fetchHistoricalData, getPortfolioId]);
 
   return {
     portfolioChartData,

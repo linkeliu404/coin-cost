@@ -143,9 +143,9 @@ const CryptoSearch = ({
                     </th>
                     <th
                       scope="col"
-                      className="px-3 sm:px-6 py-2 sm:py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell"
+                      className="px-3 sm:px-6 py-2 sm:py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell whitespace-nowrap"
                     >
-                      24小时变化
+                      24h变化
                     </th>
                     <th
                       scope="col"

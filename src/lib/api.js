@@ -11,7 +11,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const API_BASE_URL = isProduction ? "" : "";
 
 // 缓存配置
-const CACHE_EXPIRY = 15 * 60 * 1000; // 延长缓存到15分钟
+const CACHE_EXPIRY = 60 * 60 * 1000; // 延长缓存到60分钟
 const cache = {
   topCoins: { data: null, timestamp: 0 },
   coinDetails: {},
@@ -20,6 +20,12 @@ const cache = {
   // 添加请求速率限制
   requestCount: 0,
   requestResetTime: 0,
+  // 添加全局加载状态跟踪
+  pendingRequests: new Map(),
+  lastRequestTime: {},
+  lastResults: {},
+  globalRequestCount: 0,
+  lastGlobalRequestTime: 0,
 };
 
 // 初始化API错误跟踪
@@ -67,14 +73,84 @@ if (typeof window !== "undefined") {
 }
 
 // 辅助函数：重试机制
-async function fetchWithRetry(fetcher, retries = 3, delay = 1000) {
-  try {
-    return await fetcher();
-  } catch (error) {
-    if (retries <= 0) throw error;
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    return fetchWithRetry(fetcher, retries - 1, delay * 1.5);
+async function fetchWithRetry(
+  fetcher,
+  retries = 3,
+  delay = 1000,
+  cacheKey = null
+) {
+  // 如果存在相同的请求正在进行中，直接返回该Promise
+  if (cacheKey && cache.pendingRequests.has(cacheKey)) {
+    console.log(`复用已有请求: ${cacheKey}`);
+    return cache.pendingRequests.get(cacheKey);
   }
+
+  // 增加一个防抖动验证，避免短时间内重复请求
+  const now = Date.now();
+  if (
+    cacheKey &&
+    cache.lastRequestTime[cacheKey] &&
+    now - cache.lastRequestTime[cacheKey] < 2000
+  ) {
+    console.log(`快速重复请求被阻止: ${cacheKey}`);
+    if (cache.lastResults[cacheKey]) {
+      return cache.lastResults[cacheKey];
+    }
+  }
+
+  // 记录请求时间
+  if (cacheKey) {
+    cache.lastRequestTime[cacheKey] = now;
+  }
+
+  // 全局请求限流
+  if (now - cache.lastGlobalRequestTime < 200) {
+    // 确保全局请求间隔至少200ms
+    cache.globalRequestCount++;
+    if (cache.globalRequestCount > 10) {
+      // 如果短时间内请求过多
+      const waitDelay = Math.min(delay * (cache.globalRequestCount / 5), 3000); // 最多等待3秒
+      console.log(`API请求频率过高，延迟 ${waitDelay}ms`);
+      await new Promise((resolve) => setTimeout(resolve, waitDelay));
+      cache.globalRequestCount = 0;
+    }
+  } else {
+    cache.lastGlobalRequestTime = now;
+    cache.globalRequestCount = 0;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const result = await fetcher();
+      // 存储最近的结果，用于快速重复请求
+      if (cacheKey) {
+        cache.lastResults[cacheKey] = result;
+      }
+      return result;
+    } catch (error) {
+      console.warn(`请求失败: ${error.message}, 重试次数剩余: ${retries}`);
+      if (retries <= 0) throw error;
+
+      // 使用指数退避策略
+      const backoffDelay = delay * (1 + Math.random());
+      console.log(`等待 ${backoffDelay}ms 后重试...`);
+      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+      return fetchWithRetry(fetcher, retries - 1, delay * 1.5, cacheKey);
+    } finally {
+      if (cacheKey) {
+        // 延迟从pendingRequests中删除，允许并发请求在短时间内重用结果
+        setTimeout(() => {
+          cache.pendingRequests.delete(cacheKey);
+        }, 500);
+      }
+    }
+  })();
+
+  if (cacheKey) {
+    cache.pendingRequests.set(cacheKey, fetchPromise);
+  }
+
+  return fetchPromise;
 }
 
 // 添加请求速率限制处理函数
@@ -872,150 +948,185 @@ export const getMultipleCryptocurrencyDetails = async (coinIds) => {
 };
 
 /**
- * 获取历史价格数据，优先使用Binance API
+ * 获取历史价格数据，优先使用缓存，支持批量处理
  * @param {Array<string>|string} coinIds - 加密货币ID或ID数组
  * @param {number} days - 天数
  * @returns {Promise<Object>} - 历史价格数据，格式为 {coinId: {prices: [[timestamp, price], ...], market_caps: [...], total_volumes: [...]}}
  */
 export const getHistoricalPriceData = async (coinIds, days = 7) => {
-  // 处理单个coinId的情况
-  const coinIdArray = Array.isArray(coinIds) ? coinIds : [coinIds];
+  // 确保coinIds统一处理为数组
+  const coinIdsArray = Array.isArray(coinIds) ? coinIds : [coinIds];
+
+  // 生成请求缓存键
+  const batchCacheKey = `historical_batch_${coinIdsArray.join(",")}_${days}`;
+
+  // 首先尝试从localStorage获取数据（浏览器刷新后依然有效）
+  try {
+    const localStorageKey = `hist_data_${coinIdsArray.join("_")}_${days}`;
+    const localData = localStorage.getItem(localStorageKey);
+
+    if (localData) {
+      const { data, timestamp } = JSON.parse(localData);
+      // 本地存储缓存有效期设为2小时
+      if (Date.now() - timestamp < 2 * 60 * 60 * 1000) {
+        console.log("Using localStorage cache for historical data");
+        return data;
+      }
+    }
+  } catch (e) {
+    console.warn("localStorage读取失败", e);
+  }
+
+  // 检查是否有完整的内存批量缓存
+  if (
+    cache.historicalPrices[batchCacheKey] &&
+    Date.now() - cache.historicalPrices[batchCacheKey].timestamp < CACHE_EXPIRY
+  ) {
+    return cache.historicalPrices[batchCacheKey].data;
+  }
+
+  // 分组处理：已缓存和需要获取的ID
   const result = {};
+  const missingIds = [];
+
+  // 检查每个ID是否已有有效缓存
+  for (const id of coinIdsArray) {
+    const singleCacheKey = `historical_${id}_${days}`;
+
+    if (
+      cache.historicalPrices[singleCacheKey] &&
+      Date.now() - cache.historicalPrices[singleCacheKey].timestamp <
+        CACHE_EXPIRY
+    ) {
+      // 使用缓存数据
+      result[id] = cache.historicalPrices[singleCacheKey].data[id];
+    } else {
+      // 需要获取的ID
+      missingIds.push(id);
+    }
+  }
+
+  // 如果所有ID都有缓存，返回合并的结果
+  if (missingIds.length === 0) {
+    // 更新批量缓存
+    cache.historicalPrices[batchCacheKey] = {
+      data: result,
+      timestamp: Date.now(),
+    };
+
+    // 保存到localStorage以便刷新后使用
+    try {
+      const localStorageKey = `hist_data_${coinIdsArray.join("_")}_${days}`;
+      localStorage.setItem(
+        localStorageKey,
+        JSON.stringify({
+          data: result,
+          timestamp: Date.now(),
+        })
+      );
+    } catch (e) {
+      console.warn("localStorage保存失败", e);
+    }
+
+    return result;
+  }
 
   try {
-    console.log(
-      `Fetching historical price data for coin IDs: ${coinIdArray.join(
-        ", "
-      )}, days: ${days}`
-    );
+    // 为所有缺失的ID发起单个批量请求
+    const missingData = await fetchWithRetry(
+      async () => {
+        // CoinGecko API支持批量获取多个币种的历史数据
+        const urlParams = `market_chart?vs_currency=usd&days=${days}&ids=${missingIds.join(
+          ","
+        )}`;
+        const response = await fetchCoinGeckoProxy(
+          `coins/markets/${urlParams}`
+        );
 
-    // 使用Promise.all并行获取多个币种的数据
-    await Promise.all(
-      coinIdArray.map(async (coinId) => {
-        try {
-          // 获取币种符号信息
-          const coinInfo = await fetchCoinGeckoProxy(
-            `coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`
-          );
+        // 如果返回的不是每个币种分组的数据，需要处理转换
+        const formattedData = {};
 
-          if (!coinInfo || !coinInfo.symbol) {
-            console.warn(
-              `无法获取币种 ${coinId} 的基本信息，尝试使用CoinGecko API`
-            );
-            // 如果无法获取符号信息，直接使用CoinGecko API
-            const data = await fetchCoinGeckoProxy(
-              `coins/${coinId}/market_chart`,
-              {
-                vs_currency: "usd",
-                days: days.toString(),
-                interval: days <= 1 ? "hourly" : "daily",
-              }
-            );
-
-            if (data && data.prices && data.prices.length) {
-              result[coinId] = {
-                ...data,
-                source: "coingecko",
-              };
-            } else {
-              // CoinGecko也没有数据
-              result[coinId] = {
-                prices: [],
-                market_caps: [],
-                total_volumes: [],
-                error: "No price data available from any source",
+        // 检查响应格式：如果是数组，需要转换为币种ID索引的对象
+        if (Array.isArray(response)) {
+          response.forEach((item) => {
+            if (item.id) {
+              formattedData[item.id] = {
+                prices: item.prices || [],
+                market_caps: item.market_caps || [],
+                total_volumes: item.total_volumes || [],
               };
             }
-            return;
-          }
-
-          // 获取币种符号
-          const symbol = coinInfo.symbol.toUpperCase();
-          const binanceSymbol = `${symbol}USDT`;
-
-          // 1. 首先尝试从Binance获取K线数据
-          const interval = days <= 1 ? "1h" : days <= 7 ? "4h" : "1d";
-          const limit = days <= 1 ? 24 : days <= 7 ? 42 : Math.min(days, 90);
-
-          console.log(`尝试从Binance获取 ${binanceSymbol} 的K线数据`);
-          const binanceData = await getBinanceKlines(
-            binanceSymbol,
-            interval,
-            limit
-          );
-
-          if (binanceData && binanceData.length > 0) {
-            console.log(`成功获取 ${binanceSymbol} 的Binance数据`);
-            const prices = binanceData.map((kline) => [
-              parseInt(kline[0]), // timestamp
-              parseFloat(kline[4]), // close price
-            ]);
-
-            result[coinId] = {
-              prices,
-              market_caps: [],
-              total_volumes: [],
-              source: "binance",
-            };
-            return;
-          }
-
-          console.log(
-            `Binance无数据，尝试使用CoinGecko API获取 ${coinId} 数据`
-          );
-
-          // 2. Binance无数据，尝试CoinGecko API v3（无需API key）
-          const data = await fetchCoinGeckoProxy(
-            `coins/${coinId}/market_chart`,
-            {
-              vs_currency: "usd",
-              days: days.toString(),
-              interval: days <= 1 ? "hourly" : "daily",
-            }
-          );
-
-          if (data && data.prices && data.prices.length) {
-            console.log(`成功使用CoinGecko获取 ${coinId} 数据`);
-            result[coinId] = {
-              ...data,
-              source: "coingecko",
-            };
-            return;
-          }
-
-          // 3. 两个API都没有返回有效数据
-          console.warn(`无法从任何源获取 ${coinId} 的价格数据`);
-          result[coinId] = {
-            prices: [],
-            market_caps: [],
-            total_volumes: [],
-            error: "No price data available from any source",
-          };
-        } catch (error) {
-          console.error(`Error fetching data for ${coinId}:`, error);
-          result[coinId] = {
-            prices: [],
-            market_caps: [],
-            total_volumes: [],
-            error: error.message,
-          };
+          });
         }
-      })
+        // 如果是单个币种数据，将其映射到所有请求的币种
+        else if (response && (response.prices || response.market_caps)) {
+          missingIds.forEach((id) => {
+            formattedData[id] = response;
+          });
+        }
+        // 如果响应已经是按币种ID索引的对象
+        else if (typeof response === "object") {
+          Object.assign(formattedData, response);
+        }
+
+        return formattedData;
+      },
+      3,
+      1000,
+      batchCacheKey
     );
 
-    return result;
+    // 更新每个币种的独立缓存
+    for (const id of missingIds) {
+      if (missingData[id]) {
+        const singleCacheKey = `historical_${id}_${days}`;
+        cache.historicalPrices[singleCacheKey] = {
+          data: { [id]: missingData[id] },
+          timestamp: Date.now(),
+        };
+      }
+    }
+
+    // 合并结果
+    const combinedResult = { ...result, ...missingData };
+
+    // 更新批量缓存
+    cache.historicalPrices[batchCacheKey] = {
+      data: combinedResult,
+      timestamp: Date.now(),
+    };
+
+    // 保存到localStorage以便刷新后使用
+    try {
+      const localStorageKey = `hist_data_${coinIdsArray.join("_")}_${days}`;
+      localStorage.setItem(
+        localStorageKey,
+        JSON.stringify({
+          data: combinedResult,
+          timestamp: Date.now(),
+        })
+      );
+    } catch (e) {
+      console.warn("localStorage保存失败", e);
+    }
+
+    return combinedResult;
   } catch (error) {
-    console.error("Failed to fetch historical price data:", error);
-    // 返回空数据对象，避免整个应用崩溃
-    coinIdArray.forEach((coinId) => {
-      result[coinId] = {
-        prices: [],
-        market_caps: [],
-        total_volumes: [],
-        error: error.message,
-      };
-    });
-    return result;
+    console.error("历史价格数据获取失败:", error);
+
+    // 如果有部分数据，返回这些数据
+    if (Object.keys(result).length > 0) {
+      return result;
+    }
+
+    // 如果有过期的批量缓存，尝试使用它
+    if (cache.historicalPrices[batchCacheKey]) {
+      console.log(`使用过期缓存：${batchCacheKey}`);
+      return cache.historicalPrices[batchCacheKey].data;
+    }
+
+    // 最终失败，返回空对象
+    return {};
   }
 };
 
