@@ -22,6 +22,12 @@ export async function GET(request) {
   // 删除 endpoint 参数
   searchParams.delete("endpoint");
 
+  // 添加 API key 如果环境变量中存在
+  const apiKey = process.env.NEXT_PUBLIC_COINGECKO_API_KEY;
+  if (apiKey) {
+    searchParams.set("x_cg_demo_api_key", apiKey);
+  }
+
   // 构建新的 URL 参数字符串
   const paramsString = Array.from(searchParams.entries())
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
@@ -39,12 +45,19 @@ export async function GET(request) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
 
+    const headers = {
+      Accept: "application/json",
+      "User-Agent": "CryptoCost/1.0 (https://coin-cost.vercel.app/)",
+    };
+
+    // 添加 API Key 到请求头中
+    if (apiKey) {
+      headers["x-cg-demo-api-key"] = apiKey;
+    }
+
     const response = await fetch(apiUrl, {
       signal: controller.signal,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "CryptoCost/1.0 (https://coin-cost.vercel.app/)",
-      },
+      headers,
     });
 
     // 清除超时
@@ -66,7 +79,9 @@ export async function GET(request) {
         timestamp: new Date().toISOString(),
         endpoint,
         details: errorContent || "未能获取错误详情",
-        url: apiUrl.replace(/api_key=[^&]+/, "api_key=REDACTED"), // 隐藏API密钥
+        url: apiUrl
+          .replace(/api_key=[^&]+/, "api_key=REDACTED")
+          .replace(/x_cg_demo_api_key=[^&]+/, "x_cg_demo_api_key=REDACTED"), // 隐藏API密钥
       };
 
       console.error("CoinGecko API error:", errorInfo);
@@ -101,7 +116,9 @@ export async function GET(request) {
       name: error.name,
       message: error.message,
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-      url: apiUrl?.replace(/api_key=[^&]+/, "api_key=REDACTED"), // 隐藏API密钥
+      url: apiUrl
+        ?.replace(/api_key=[^&]+/, "api_key=REDACTED")
+        .replace(/x_cg_demo_api_key=[^&]+/, "x_cg_demo_api_key=REDACTED"), // 隐藏API密钥
     };
 
     console.error("CoinGecko API proxy error:", errorInfo);
