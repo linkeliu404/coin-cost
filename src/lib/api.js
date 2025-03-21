@@ -134,6 +134,37 @@ async function rateLimitedRequest(fetcher, fallbackData = null) {
   }
 }
 
+// 辅助函数：提取API响应中的有效数据
+function extractValidData(response, defaultValue = []) {
+  if (!response) {
+    return defaultValue;
+  }
+
+  // 如果响应本身是数组，直接返回
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  // 检查常见的数据字段
+  if (response.data && Array.isArray(response.data)) {
+    return response.data;
+  }
+
+  // 如果是搜索结果，可能包含coins字段
+  if (response.coins && Array.isArray(response.coins)) {
+    return response.coins;
+  }
+
+  // 如果是市场数据，可能包含prices字段
+  if (response.prices && Array.isArray(response.prices)) {
+    return response.prices;
+  }
+
+  // 返回默认值
+  console.warn("Could not extract valid data from response:", response);
+  return defaultValue;
+}
+
 /**
  * 获取CoinGecko数据的代理函数
  * @param {string} endpoint - API端点路径
@@ -171,7 +202,20 @@ async function fetchCoinGeckoProxy(endpoint, params = {}) {
         });
       }
 
-      return response.data;
+      // 处理响应数据，确保格式一致
+      const responseData = response.data;
+
+      // 检查是否是一个有data字段的对象，且该字段是数组
+      if (
+        responseData &&
+        !Array.isArray(responseData) &&
+        Array.isArray(responseData.data)
+      ) {
+        return responseData.data;
+      }
+
+      // 否则返回原始响应
+      return responseData;
     });
 
     // 更新缓存
@@ -321,7 +365,7 @@ async function enrichWithBinanceData(coinGeckoData) {
 }
 
 /**
- * 获取热门加密货币列表
+ * 获取热门加密货币列表，优先使用Binance API
  * @param {number} limit - 返回结果数量限制
  * @returns {Promise<Array>} 加密货币列表
  */
@@ -329,10 +373,69 @@ export const getTopCryptocurrencies = async (limit = 50) => {
   // 检查缓存
   const now = Date.now();
   if (cache.topCoins.data && now - cache.topCoins.timestamp < CACHE_EXPIRY) {
+    console.log("使用缓存的热门币种数据");
     return cache.topCoins.data.slice(0, limit);
   }
 
   try {
+    // 首先尝试从Binance获取主要交易对信息
+    console.log("尝试从Binance获取热门币种数据");
+    const binanceSymbols = await fetchBinanceSymbols();
+
+    if (binanceSymbols && binanceSymbols.length > 0) {
+      console.log(`成功从Binance获取了 ${binanceSymbols.length} 个交易对信息`);
+
+      // 筛选USDT交易对并提取基础币种
+      const usdtPairs = binanceSymbols
+        .filter((s) => s.symbol.endsWith("USDT"))
+        .sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume)) // 按交易量排序
+        .slice(0, Math.min(100, limit * 2)); // 获取交易量最大的100个或limit*2个
+
+      // 基于Binance数据构建初步结果
+      let results = await Promise.all(
+        usdtPairs.map(async (pair) => {
+          const baseSymbol = pair.symbol.replace("USDT", "");
+          const price = await getBinancePrice(pair.symbol);
+
+          return {
+            id: baseSymbol.toLowerCase(), // 临时ID，后面需要通过CoinGecko API补充
+            symbol: baseSymbol.toLowerCase(),
+            name: baseSymbol,
+            current_price: price || 0,
+            price_change_24h: 0, // 需要额外API调用获取
+            price_change_percentage_24h: 0, // 需要额外API调用获取
+            market_cap: 0, // 需要通过CoinGecko补充
+            image: `https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/${baseSymbol.toLowerCase()}.png`,
+            binance_symbol: pair.symbol,
+            binance_volume: parseFloat(pair.volume || 0),
+            binance_price_available: price !== null,
+          };
+        })
+      );
+
+      // 过滤掉没有价格的结果
+      results = results.filter((r) => r.binance_price_available);
+
+      // 如果Binance数据足够使用，记录到缓存并返回
+      if (results.length >= limit) {
+        console.log(`使用Binance数据返回 ${limit} 个热门币种`);
+
+        // 更新缓存
+        cache.topCoins = {
+          data: results,
+          timestamp: now,
+        };
+
+        return results.slice(0, limit);
+      }
+
+      console.log(
+        `Binance数据不足 (${results.length}/${limit})，尝试使用CoinGecko补充`
+      );
+    }
+
+    // 如果Binance没有数据或数据不足，使用CoinGecko API
+    console.log("使用CoinGecko API获取热门币种数据");
     const response = await fetchWithRetry(async () => {
       return await fetchCoinGeckoProxy("coins/markets", {
         vs_currency: "usd",
@@ -344,9 +447,22 @@ export const getTopCryptocurrencies = async (limit = 50) => {
       });
     });
 
+    // 确保响应是有效的数组
+    const validData = extractValidData(response);
+    if (!validData.length) {
+      console.error("Invalid response from CoinGecko API:", response);
+      // 如果缓存存在但已过期，仍然返回它
+      if (cache.topCoins.data) {
+        console.log("Returning stale cached data for top cryptocurrencies");
+        return cache.topCoins.data.slice(0, limit);
+      }
+      // 返回空数组
+      return [];
+    }
+
     // 增强数据
     const enrichedData = await Promise.all(
-      response.map((coin) => enrichWithBinanceData(coin))
+      validData.map((coin) => enrichWithBinanceData(coin))
     );
 
     // 更新缓存
@@ -375,7 +491,39 @@ export const getTopCryptocurrencies = async (limit = 50) => {
 };
 
 /**
- * 搜索加密货币
+ * 获取Binance所有交易对信息
+ * @returns {Promise<Array>} 交易对列表
+ */
+async function fetchBinanceSymbols() {
+  try {
+    // 使用Binance API获取24小时统计信息，包含所有交易对的交易量
+    const response = await fetch(
+      "https://api1.binance.com/api/v3/ticker/24hr",
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Binance API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.map((item) => ({
+      symbol: item.symbol,
+      volume: item.quoteVolume, // 使用USDT计价的交易量
+      priceChange: item.priceChange,
+      priceChangePercent: item.priceChangePercent,
+    }));
+  } catch (error) {
+    console.error("Error fetching Binance symbols:", error);
+    return null;
+  }
+}
+
+/**
+ * 搜索加密货币，优先使用Binance匹配
  * @param {string} query - 搜索关键词
  * @returns {Promise<Array>} 搜索结果列表
  */
@@ -386,102 +534,177 @@ export const searchCryptocurrencies = async (query) => {
     // 检查是否是合约地址（以0x开头的40位十六进制字符串）
     const isContractAddress = /^0x[a-fA-F0-9]{40}$/i.test(query);
 
-    // 如果是合约地址
+    // 如果是合约地址，直接使用CoinGecko搜索
     if (isContractAddress) {
-      console.log(`Searching for contract address: ${query}`);
+      console.log(`搜索合约地址: ${query}`);
+      return await searchContractAddress(query);
+    }
 
-      try {
-        // 使用专门的API搜索合约地址
-        // 先尝试使用CoinGecko的资产平台API (使用ethereum作为默认平台)
-        const ethResponse = await fetchWithRetry(async () => {
-          return await fetchCoinGeckoProxy(
-            "coins/ethereum/contract/" + query.toLowerCase()
-          );
-        });
+    // 尝试在Binance中搜索匹配的交易对
+    console.log(`在Binance中搜索: ${query}`);
+    const binanceResults = await searchBinanceSymbols(query);
 
-        if (ethResponse.data && ethResponse.data.id) {
-          // 获取详细市场数据
-          const detailsResponse = await fetchWithRetry(async () => {
-            return await fetchCoinGeckoProxy("coins/markets", {
-              vs_currency: "usd",
-              ids: ethResponse.data.id,
-              sparkline: false,
-              price_change_percentage: "24h",
-            });
-          });
+    if (binanceResults && binanceResults.length > 0) {
+      console.log(`Binance搜索找到 ${binanceResults.length} 个结果`);
+      return binanceResults;
+    }
 
-          if (detailsResponse.data && detailsResponse.data.length > 0) {
-            return [detailsResponse.data[0]];
-          }
-        }
-      } catch (error) {
-        console.log(
-          "Failed to find exact contract, trying alternative methods:",
-          error
-        );
-      }
+    console.log(`Binance无匹配结果，尝试使用CoinGecko搜索: ${query}`);
 
-      // 如果专门的合约搜索失败，尝试常规搜索
-      const response = await fetchWithRetry(async () => {
-        return await fetchCoinGeckoProxy("search", { query });
-      });
-
-      // 提取匹配的合约地址
-      const matchingCoins = response.data.coins.filter(
+    // 普通搜索
+    // 先尝试在缓存的热门币中搜索
+    if (cache.topCoins.data) {
+      const cacheResults = cache.topCoins.data.filter(
         (coin) =>
-          coin.platforms &&
-          Object.values(coin.platforms).some(
-            (addr) => addr && addr.toLowerCase() === query.toLowerCase()
-          )
+          coin.name.toLowerCase().includes(query.toLowerCase()) ||
+          coin.symbol.toLowerCase().includes(query.toLowerCase())
       );
 
-      if (matchingCoins.length > 0) {
-        // 获取详细信息
-        const coinIds = matchingCoins.map((coin) => coin.id).join(",");
-        const detailsResponse = await fetchWithRetry(async () => {
-          return await fetchCoinGeckoProxy("coins/markets", {
-            vs_currency: "usd",
-            ids: coinIds,
-            order: "market_cap_desc",
-            sparkline: false,
-            price_change_percentage: "24h",
-          });
-        });
-
-        return detailsResponse.data;
+      if (cacheResults.length > 0) {
+        console.log("返回缓存搜索结果");
+        return cacheResults.slice(0, 10);
       }
-
-      // 如果仍然没有找到，返回空数组
-      return [];
     }
-    // 普通搜索
-    else {
-      // 先尝试在缓存的热门币中搜索
-      if (cache.topCoins.data) {
-        const cacheResults = cache.topCoins.data.filter(
-          (coin) =>
-            coin.name.toLowerCase().includes(query.toLowerCase()) ||
-            coin.symbol.toLowerCase().includes(query.toLowerCase())
-        );
 
-        if (cacheResults.length > 0) {
-          console.log("Returning search results from cache");
-          return cacheResults.slice(0, 10);
-        }
-      }
+    // 使用CoinGecko搜索API
+    const response = await fetchWithRetry(async () => {
+      return await fetchCoinGeckoProxy("search", { query });
+    });
 
-      // 使用CoinGecko搜索API
-      const response = await fetchWithRetry(async () => {
-        return await fetchCoinGeckoProxy("search", { query });
+    // 搜索API只返回基本信息，需要获取详细信息
+    const coins = extractValidData(response.coins || response, []).slice(0, 10); // 限制结果数量
+
+    if (coins.length === 0) return [];
+
+    // 获取详细信息
+    const coinIds = coins.map((coin) => coin.id).join(",");
+    const detailsResponse = await fetchWithRetry(async () => {
+      return await fetchCoinGeckoProxy("coins/markets", {
+        vs_currency: "usd",
+        ids: coinIds,
+        order: "market_cap_desc",
+        sparkline: false,
+        price_change_percentage: "24h",
+      });
+    });
+
+    // 增强数据
+    const validDetailsData = extractValidData(detailsResponse, []);
+    return await Promise.all(
+      validDetailsData.map((coin) => enrichWithBinanceData(coin))
+    );
+  } catch (error) {
+    console.error("Failed to search cryptocurrencies:", error);
+    return [];
+  }
+};
+
+/**
+ * 在Binance中搜索匹配的交易对
+ * @param {string} query - 搜索关键词
+ * @returns {Promise<Array>} 搜索结果列表
+ */
+async function searchBinanceSymbols(query) {
+  try {
+    // 获取所有交易对信息
+    const symbols = await fetchBinanceSymbols();
+    if (!symbols || !symbols.length) return null;
+
+    // 搜索匹配的USDT交易对
+    const normalizedQuery = query.toLowerCase();
+    const matchingPairs = symbols.filter(
+      (s) =>
+        s.symbol.toLowerCase().includes(normalizedQuery) &&
+        s.symbol.endsWith("USDT")
+    );
+
+    if (matchingPairs.length === 0) return null;
+
+    // 构建结果对象
+    const results = await Promise.all(
+      matchingPairs.slice(0, 10).map(async (pair) => {
+        const baseSymbol = pair.symbol.replace("USDT", "");
+        const price = await getBinancePrice(pair.symbol);
+
+        if (price === null) return null;
+
+        return {
+          id: baseSymbol.toLowerCase(),
+          symbol: baseSymbol.toLowerCase(),
+          name: baseSymbol,
+          current_price: price,
+          price_change_24h: parseFloat(pair.priceChange) || 0,
+          price_change_percentage_24h: parseFloat(pair.priceChangePercent) || 0,
+          market_cap: 0, // Binance不提供市值数据
+          image: `https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/${baseSymbol.toLowerCase()}.png`,
+          binance_symbol: pair.symbol,
+          binance_volume: parseFloat(pair.volume || 0),
+          binance_price_available: true,
+        };
+      })
+    );
+
+    // 过滤掉无效结果
+    return results.filter((r) => r !== null);
+  } catch (error) {
+    console.error("Error searching Binance symbols:", error);
+    return null;
+  }
+}
+
+/**
+ * 搜索合约地址
+ * @param {string} address - 合约地址
+ * @returns {Promise<Array>} 搜索结果列表
+ */
+async function searchContractAddress(address) {
+  try {
+    // 使用专门的API搜索合约地址
+    // 先尝试使用CoinGecko的资产平台API (使用ethereum作为默认平台)
+    const ethResponse = await fetchWithRetry(async () => {
+      return await fetchCoinGeckoProxy(
+        "coins/ethereum/contract/" + address.toLowerCase()
+      );
+    });
+
+    if (ethResponse && ethResponse.id) {
+      // 获取详细市场数据
+      const detailsResponse = await fetchWithRetry(async () => {
+        return await fetchCoinGeckoProxy("coins/markets", {
+          vs_currency: "usd",
+          ids: ethResponse.id,
+          sparkline: false,
+          price_change_percentage: "24h",
+        });
       });
 
-      // 搜索API只返回基本信息，需要获取详细信息
-      const coins = response.data.coins.slice(0, 10); // 限制结果数量
+      if (
+        detailsResponse &&
+        Array.isArray(detailsResponse) &&
+        detailsResponse.length > 0
+      ) {
+        return [detailsResponse[0]];
+      }
+    }
 
-      if (coins.length === 0) return [];
+    // 如果专门的合约搜索失败，尝试常规搜索
+    const response = await fetchWithRetry(async () => {
+      return await fetchCoinGeckoProxy("search", { query: address });
+    });
 
+    // 提取匹配的合约地址
+    const coinsData = extractValidData(response.coins || response, []);
+    const matchingCoins = coinsData.filter(
+      (coin) =>
+        coin.platforms &&
+        Object.values(coin.platforms).some(
+          (addr) => addr && addr.toLowerCase() === address.toLowerCase()
+        )
+    );
+
+    if (matchingCoins.length > 0) {
       // 获取详细信息
-      const coinIds = coins.map((coin) => coin.id).join(",");
+      const coinIds = matchingCoins.map((coin) => coin.id).join(",");
       const detailsResponse = await fetchWithRetry(async () => {
         return await fetchCoinGeckoProxy("coins/markets", {
           vs_currency: "usd",
@@ -492,16 +715,16 @@ export const searchCryptocurrencies = async (query) => {
         });
       });
 
-      // 增强数据
-      return await Promise.all(
-        detailsResponse.data.map((coin) => enrichWithBinanceData(coin))
-      );
+      return extractValidData(detailsResponse, []);
     }
+
+    // 如果仍然没有找到，返回空数组
+    return [];
   } catch (error) {
-    console.error("Failed to search cryptocurrencies:", error);
+    console.error("Failed to search contract address:", error);
     return [];
   }
-};
+}
 
 /**
  * 获取加密货币详情
@@ -649,7 +872,7 @@ export const getMultipleCryptocurrencyDetails = async (coinIds) => {
 };
 
 /**
- * 获取历史价格数据，支持多币种
+ * 获取历史价格数据，优先使用Binance API
  * @param {Array<string>|string} coinIds - 加密货币ID或ID数组
  * @param {number} days - 天数
  * @returns {Promise<Object>} - 历史价格数据，格式为 {coinId: {prices: [[timestamp, price], ...], market_caps: [...], total_volumes: [...]}}
@@ -670,43 +893,51 @@ export const getHistoricalPriceData = async (coinIds, days = 7) => {
     await Promise.all(
       coinIdArray.map(async (coinId) => {
         try {
-          // 优先使用CoinGecko API
-          const data = await fetchCoinGeckoProxy(
-            `coins/${coinId}/market_chart`,
-            {
-              vs_currency: "usd",
-              days: days.toString(),
-              interval: days <= 1 ? "hourly" : "daily",
-            }
-          );
-
-          if (data && data.prices && data.prices.length) {
-            result[coinId] = {
-              ...data,
-              source: "coingecko",
-            };
-            return;
-          }
-
-          // 如果CoinGecko无数据，尝试Binance作为备选
-          console.log(`No CoinGecko data for ${coinId}, trying Binance...`);
-
           // 获取币种符号信息
           const coinInfo = await fetchCoinGeckoProxy(
             `coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`
           );
 
           if (!coinInfo || !coinInfo.symbol) {
-            throw new Error("Invalid coin information");
+            console.warn(
+              `无法获取币种 ${coinId} 的基本信息，尝试使用CoinGecko API`
+            );
+            // 如果无法获取符号信息，直接使用CoinGecko API
+            const data = await fetchCoinGeckoProxy(
+              `coins/${coinId}/market_chart`,
+              {
+                vs_currency: "usd",
+                days: days.toString(),
+                interval: days <= 1 ? "hourly" : "daily",
+              }
+            );
+
+            if (data && data.prices && data.prices.length) {
+              result[coinId] = {
+                ...data,
+                source: "coingecko",
+              };
+            } else {
+              // CoinGecko也没有数据
+              result[coinId] = {
+                prices: [],
+                market_caps: [],
+                total_volumes: [],
+                error: "No price data available from any source",
+              };
+            }
+            return;
           }
 
+          // 获取币种符号
           const symbol = coinInfo.symbol.toUpperCase();
           const binanceSymbol = `${symbol}USDT`;
 
-          // 尝试使用Binance获取数据
+          // 1. 首先尝试从Binance获取K线数据
           const interval = days <= 1 ? "1h" : days <= 7 ? "4h" : "1d";
           const limit = days <= 1 ? 24 : days <= 7 ? 42 : Math.min(days, 90);
 
+          console.log(`尝试从Binance获取 ${binanceSymbol} 的K线数据`);
           const binanceData = await getBinanceKlines(
             binanceSymbol,
             interval,
@@ -714,6 +945,7 @@ export const getHistoricalPriceData = async (coinIds, days = 7) => {
           );
 
           if (binanceData && binanceData.length > 0) {
+            console.log(`成功获取 ${binanceSymbol} 的Binance数据`);
             const prices = binanceData.map((kline) => [
               parseInt(kline[0]), // timestamp
               parseFloat(kline[4]), // close price
@@ -725,15 +957,40 @@ export const getHistoricalPriceData = async (coinIds, days = 7) => {
               total_volumes: [],
               source: "binance",
             };
-          } else {
-            // 两个来源都没有数据
-            result[coinId] = {
-              prices: [],
-              market_caps: [],
-              total_volumes: [],
-              error: "No price data available from any source",
-            };
+            return;
           }
+
+          console.log(
+            `Binance无数据，尝试使用CoinGecko API获取 ${coinId} 数据`
+          );
+
+          // 2. Binance无数据，尝试CoinGecko API v3（无需API key）
+          const data = await fetchCoinGeckoProxy(
+            `coins/${coinId}/market_chart`,
+            {
+              vs_currency: "usd",
+              days: days.toString(),
+              interval: days <= 1 ? "hourly" : "daily",
+            }
+          );
+
+          if (data && data.prices && data.prices.length) {
+            console.log(`成功使用CoinGecko获取 ${coinId} 数据`);
+            result[coinId] = {
+              ...data,
+              source: "coingecko",
+            };
+            return;
+          }
+
+          // 3. 两个API都没有返回有效数据
+          console.warn(`无法从任何源获取 ${coinId} 的价格数据`);
+          result[coinId] = {
+            prices: [],
+            market_caps: [],
+            total_volumes: [],
+            error: "No price data available from any source",
+          };
         } catch (error) {
           console.error(`Error fetching data for ${coinId}:`, error);
           result[coinId] = {

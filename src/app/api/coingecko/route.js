@@ -73,22 +73,38 @@ export async function GET(request) {
 
   // 添加 API key 如果环境变量中存在
   const apiKey = process.env.NEXT_PUBLIC_COINGECKO_API_KEY;
-  if (apiKey) {
-    searchParams.set("x_cg_demo_api_key", apiKey);
-  }
 
   // 构建新的 URL 参数字符串
   const paramsString = Array.from(searchParams.entries())
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
     .join("&");
 
-  // 构建完整的 API URL
-  const apiUrl = `https://api.coingecko.com/api/v3/${endpoint}${
-    paramsString ? `?${paramsString}` : ""
-  }`;
+  // 确定使用哪个API版本
+  let apiUrl;
+  let headers = {
+    Accept: "application/json",
+    "User-Agent": "CryptoCost/1.0 (https://coin-cost.vercel.app/)",
+  };
 
-  // 缓存键
-  const cacheKey = `coingecko:${endpoint}:${paramsString}`;
+  // 如果有API key，则使用专业版API
+  if (apiKey) {
+    apiUrl = `https://pro-api.coingecko.com/api/v3/${endpoint}${
+      paramsString ? `?${paramsString}` : ""
+    }`;
+    headers["x-cg-pro-api-key"] = apiKey;
+    console.log("Using CoinGecko Pro API with API key");
+  } else {
+    // 否则使用免费版API
+    apiUrl = `https://api.coingecko.com/api/v3/${endpoint}${
+      paramsString ? `?${paramsString}` : ""
+    }`;
+    console.log("Using CoinGecko free API (no API key)");
+  }
+
+  // 缓存键 - 区分Pro和免费版本
+  const cacheKey = `coingecko:${
+    apiKey ? "pro:" : ""
+  }${endpoint}:${paramsString}`;
 
   // 确定缓存时间 (秒)
   let cacheTTL = 300; // 默认5分钟
@@ -119,7 +135,8 @@ export async function GET(request) {
       requestResetTime = now;
     }
 
-    if (requestCount >= MAX_REQUESTS_PER_MINUTE) {
+    // 只对免费版API进行速率限制
+    if (!apiKey && requestCount >= MAX_REQUESTS_PER_MINUTE) {
       console.warn("API请求频率已达上限，等待下一分钟");
       const timeToWait = 60000 - (now - requestResetTime) + 1000;
       await new Promise((resolve) => setTimeout(resolve, timeToWait));
@@ -127,24 +144,21 @@ export async function GET(request) {
       requestResetTime = Date.now();
     }
 
-    requestCount++;
+    // 仅当使用免费版API时增加计数
+    if (!apiKey) {
+      requestCount++;
+    }
+
     console.log(
-      `Proxying CoinGecko request to: ${apiUrl} (request ${requestCount} this minute)`
+      `Proxying CoinGecko request to: ${apiUrl.replace(
+        /x-cg-pro-api-key=[^&]+/,
+        "x-cg-pro-api-key=REDACTED"
+      )} (request ${requestCount} this minute)`
     );
 
     // 设置超时
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
-
-    const headers = {
-      Accept: "application/json",
-      "User-Agent": "CryptoCost/1.0 (https://coin-cost.vercel.app/)",
-    };
-
-    // 添加 API Key 到请求头中
-    if (apiKey) {
-      headers["x-cg-demo-api-key"] = apiKey;
-    }
 
     const response = await fetch(apiUrl, {
       signal: controller.signal,
@@ -166,8 +180,10 @@ export async function GET(request) {
       if (response.status === 429) {
         console.error("CoinGecko API rate limit exceeded");
 
-        // 重置计数器并强制等待
-        requestCount = MAX_REQUESTS_PER_MINUTE;
+        // 如果是没有API key的情况，重置计数器并强制等待
+        if (!apiKey) {
+          requestCount = MAX_REQUESTS_PER_MINUTE;
+        }
 
         // 尝试返回缓存数据（即使是过期的）
         const staleData = await cache.get(`stale:${cacheKey}`);
@@ -189,7 +205,7 @@ export async function GET(request) {
         details: errorContent || "未能获取错误详情",
         url: apiUrl
           .replace(/api_key=[^&]+/, "api_key=REDACTED")
-          .replace(/x_cg_demo_api_key=[^&]+/, "x_cg_demo_api_key=REDACTED"), // 隐藏API密钥
+          .replace(/x-cg-pro-api-key=[^&]+/, "x-cg-pro-api-key=REDACTED"), // 隐藏API密钥
       };
 
       console.error("CoinGecko API error:", errorInfo);
@@ -219,6 +235,39 @@ export async function GET(request) {
       _cached: false,
       _cachedUntil: new Date(Date.now() + cacheTTL * 1000).toISOString(),
     };
+
+    // 处理coins/markets和类似的列表响应，确保始终返回数组
+    if (
+      endpoint.includes("coins/markets") ||
+      (endpoint.includes("search") && dataWithMeta.coins)
+    ) {
+      // 确保返回的是数组
+      if (!Array.isArray(dataWithMeta)) {
+        // 如果API直接返回数组，保持原样
+        if (Array.isArray(data)) {
+          const wrappedData = [...data];
+          wrappedData._cached = false;
+          wrappedData._cachedUntil = new Date(
+            Date.now() + cacheTTL * 1000
+          ).toISOString();
+
+          // 保存到缓存
+          await cache.set(cacheKey, wrappedData, cacheTTL);
+          // 同时保存一份长期的"过期缓存"用于应急
+          await cache.set(`stale:${cacheKey}`, wrappedData, 86400); // 保存24小时
+
+          return NextResponse.json(wrappedData);
+        }
+
+        // 如果是search endpoint，提取coins数组
+        if (endpoint.includes("search") && Array.isArray(dataWithMeta.coins)) {
+          dataWithMeta.data = dataWithMeta.coins;
+        } else {
+          // 否则包装在data字段中
+          dataWithMeta.data = Array.isArray(data) ? data : [];
+        }
+      }
+    }
 
     // 保存到缓存
     await cache.set(cacheKey, dataWithMeta, cacheTTL);
@@ -256,7 +305,7 @@ export async function GET(request) {
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
       url: apiUrl
         ?.replace(/api_key=[^&]+/, "api_key=REDACTED")
-        .replace(/x_cg_demo_api_key=[^&]+/, "x_cg_demo_api_key=REDACTED"), // 隐藏API密钥
+        .replace(/x-cg-pro-api-key=[^&]+/, "x-cg-pro-api-key=REDACTED"), // 隐藏API密钥
     };
 
     return NextResponse.json(errorInfo, { status: statusCode });

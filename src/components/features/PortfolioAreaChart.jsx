@@ -142,11 +142,24 @@ const PortfolioAreaChart = ({ portfolio }) => {
 
             // 找到该日期的价格
             const coinPrices = historicalData[coin.id] || [];
-            const priceData = coinPrices.find(
-              (p) => format(new Date(p.date), "MM/dd") === day.formattedDate
-            );
+            let price = coin.currentPrice || 0;
 
-            const price = priceData?.price || coin.currentPrice || 0;
+            // 确保我们有价格数据
+            if (coinPrices.prices && Array.isArray(coinPrices.prices)) {
+              // 查找与当前日期最匹配的价格点
+              const pricePoint = coinPrices.prices.find(
+                (p) => format(new Date(p[0]), "MM/dd") === day.formattedDate
+              );
+
+              if (pricePoint && pricePoint.length >= 2) {
+                price = pricePoint[1];
+              }
+            } else {
+              console.log(
+                `No price data found for ${coin.id}, using current price: ${price}`
+              );
+            }
+
             const value = price * holdingsAtDate;
 
             console.log(
