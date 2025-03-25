@@ -322,12 +322,12 @@ export const usePortfolio = () => {
 
   /**
    * 处理投资组合数据，计算各项指标
-   * @param {Array} coins - 币种数据数组
+   * @param {Object} portfolio - 投资组合对象
    * @returns {Object} 处理后的投资组合数据
    */
-  const processPortfolioData = (coins) => {
+  const processPortfolioData = (portfolio) => {
     // 处理每个币种的数据
-    const processedCoins = coins.map((coin) => {
+    const processedCoins = portfolio.coins.map((coin) => {
       // 计算持有量、总投资、平均买入价格等
       let totalHoldings = 0;
       let totalInvestment = 0;

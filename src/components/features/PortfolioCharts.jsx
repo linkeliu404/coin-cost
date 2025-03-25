@@ -70,7 +70,7 @@ const PortfolioCharts = () => {
     return JSON.stringify(
       portfolio.coins.map((coin) => ({
         id: coin.id,
-        value: coin.value,
+        value: coin.currentValue || 0,
       }))
     );
   }, [portfolio?.coins]);
@@ -81,7 +81,7 @@ const PortfolioCharts = () => {
 
     const totalValue =
       portfolio.totalValue ||
-      portfolio.coins.reduce((sum, coin) => sum + coin.value, 0);
+      portfolio.coins.reduce((sum, coin) => sum + (coin.currentValue || 0), 0);
 
     // 如果缓存的portfolioId与当前相同，直接使用缓存的饼图数据
     if (CHART_CACHE.portfolioId === portfolioHash && CHART_CACHE.pieData) {
@@ -90,8 +90,8 @@ const PortfolioCharts = () => {
 
     // 排序币种（按价值降序）
     const sortedCoins = [...portfolio.coins]
-      .filter((coin) => coin.value > 0)
-      .sort((a, b) => b.value - a.value);
+      .filter((coin) => (coin.currentValue || 0) > 0)
+      .sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0));
 
     // 生成固定的颜色
     const colors = generateChartColors(sortedCoins.length);
@@ -99,7 +99,8 @@ const PortfolioCharts = () => {
 
     // 计算百分比，保留两位小数
     const percentages = sortedCoins.map((coin, index) => {
-      const percentage = totalValue > 0 ? (coin.value / totalValue) * 100 : 0;
+      const percentage =
+        totalValue > 0 ? ((coin.currentValue || 0) / totalValue) * 100 : 0;
       const formattedPercentage = parseFloat(percentage.toFixed(2));
 
       // 存储颜色映射
@@ -109,7 +110,7 @@ const PortfolioCharts = () => {
         id: coin.id,
         symbol: coin.symbol?.toUpperCase() || "未知",
         name: coin.name || "未知币种",
-        value: coin.value,
+        value: coin.currentValue || 0,
         percentage: formattedPercentage,
         color: colors[index],
       };
@@ -152,6 +153,14 @@ const PortfolioCharts = () => {
       animation: {
         animateScale: true,
         animateRotate: true,
+      },
+      layout: {
+        padding: {
+          top: 10,
+          bottom: 10,
+          left: 10,
+          right: 10,
+        },
       },
       plugins: {
         legend: {
@@ -202,8 +211,10 @@ const PortfolioCharts = () => {
 
           {!isLoading && !error && coinPercentages.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
-              <div className="col-span-2 relative">
-                <Pie data={pieChartData} options={pieOptions} />
+              <div className="col-span-2 relative flex justify-center items-center">
+                <div style={{ width: "80%", height: "80%" }}>
+                  <Pie data={pieChartData} options={pieOptions} />
+                </div>
               </div>
               <div className="flex flex-col justify-center">
                 <ul className="space-y-2 text-sm">

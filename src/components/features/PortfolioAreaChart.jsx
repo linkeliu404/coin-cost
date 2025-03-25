@@ -73,6 +73,7 @@ const PortfolioAreaChart = ({ portfolio }) => {
     ) {
       setChartData(GLOBAL_CHART_CACHE.data);
       setIsLoading(false);
+      dataFetchedRef.current = true; // 标记数据已加载
       return;
     }
 
@@ -85,34 +86,64 @@ const PortfolioAreaChart = ({ portfolio }) => {
 
   // 当投资组合发生变化时更新数据
   useEffect(() => {
-    if (portfolio?.coins?.length && !dataFetchedRef.current) {
-      dataFetchedRef.current = true;
-      fetchChartData();
-    }
+    // 当投资组合变化时，重置数据获取标志
+    dataFetchedRef.current = false;
+    fetchChartData();
   }, [portfolio]);
 
   const fetchChartData = async () => {
-    if (!portfolio?.coins?.length) {
-      setIsLoading(false);
-      return;
-    }
-
     try {
       setIsLoading(true);
       setError(null);
 
-      // 找出所有交易中最早的日期
-      const allTransactions = portfolio.coins
-        .flatMap((coin) => coin.transactions || [])
-        .map((t) => new Date(t.date));
-
-      if (allTransactions.length === 0) {
+      // 如果没有投资组合数据，显示空图表
+      if (!portfolio?.coins?.length) {
+        const emptyChartData = {
+          labels: Array.from({ length: 7 }, (_, i) =>
+            format(subDays(new Date(), 6 - i), "MM/dd")
+          ),
+          values: Array(7).fill(0),
+        };
+        setChartData(emptyChartData);
         setIsLoading(false);
         return;
       }
 
+      // 找出所有交易中最早的日期
+      const allTransactions = portfolio.coins
+        .flatMap((coin) => coin.transactions || [])
+        .filter((t) => t && t.date); // 确保交易有日期
+
+      if (allTransactions.length === 0) {
+        // 如果没有交易记录，但有币种，使用当前价格创建图表
+        const today = new Date();
+        const labels = Array.from({ length: 7 }, (_, i) =>
+          format(subDays(today, 6 - i), "MM/dd")
+        );
+
+        // 使用当前价值填充最后一天，其他天为0
+        const values = Array(7).fill(0);
+        values[6] =
+          portfolio.totalValue ||
+          portfolio.coins.reduce(
+            (sum, coin) => sum + (coin.currentValue || 0),
+            0
+          );
+
+        const chartData = { labels, values };
+        setChartData(chartData);
+
+        // 更新全局缓存
+        GLOBAL_CHART_CACHE.data = chartData;
+        GLOBAL_CHART_CACHE.lastUpdated = Date.now();
+
+        setIsLoading(false);
+        return;
+      }
+
+      // 继续原有的数据处理逻辑...
       const earliestDate = new Date(
-        Math.min(...allTransactions.map((d) => d.getTime()))
+        Math.min(...allTransactions.map((d) => new Date(d.date).getTime()))
       );
       setEarliestTransactionDate(earliestDate);
 
@@ -255,6 +286,15 @@ const PortfolioAreaChart = ({ portfolio }) => {
     } catch (err) {
       console.error("图表数据获取错误:", err);
       setError(err.message || "获取数据失败");
+
+      // 出错时也显示一个基本图表
+      const emptyChartData = {
+        labels: Array.from({ length: 7 }, (_, i) =>
+          format(subDays(new Date(), 6 - i), "MM/dd")
+        ),
+        values: Array(7).fill(0),
+      };
+      setChartData(emptyChartData);
     } finally {
       setIsLoading(false);
     }
@@ -358,8 +398,7 @@ const PortfolioAreaChart = ({ portfolio }) => {
         )}
 
         {error && (
-          <div className="h-full flex flex-col items-center justify-center">
-            <p className="text-destructive mb-2">{error}</p>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
             <Button
               variant="outline"
               size="sm"
@@ -369,41 +408,22 @@ const PortfolioAreaChart = ({ portfolio }) => {
                 fetchChartData();
               }}
             >
-              重试
+              重试加载
             </Button>
           </div>
         )}
 
-        {!error && (
-          <div className={`h-full relative ${isLoading ? "opacity-20" : ""}`}>
-            {chartData.labels.length > 0 && chartData.values.length > 0 ? (
-              <Line
-                ref={chartRef}
-                data={chartConfig.data}
-                options={chartConfig.options}
-              />
-            ) : (
-              !isLoading && (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-                  <p className="mb-2">暂无资产走势数据</p>
-                  <p className="text-sm mb-4">
-                    请确保您已添加加密货币并记录交易
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      dataFetchedRef.current = false;
-                      fetchChartData();
-                    }}
-                  >
-                    刷新
-                  </Button>
-                </div>
-              )
-            )}
-          </div>
-        )}
+        <div
+          className={`h-full relative ${
+            isLoading || error ? "opacity-20" : ""
+          }`}
+        >
+          <Line
+            ref={chartRef}
+            data={chartConfig.data}
+            options={chartConfig.options}
+          />
+        </div>
       </CardContent>
     </Card>
   );
